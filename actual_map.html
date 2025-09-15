@@ -116,29 +116,40 @@
       window.stationLayer = L.layerGroup().addTo(map);
 
       // Ajouter stations avec popup
-Object.entries(stations).forEach(([id, st]) => {
-  const nbVelo = st.bikes;
-  const popup = `<b>${st.name}</b><br>🚲 ${nbVelo} vélos<br>🅿️ ${st.docks} places`;
+      Object.entries(stations).forEach(([id, st]) => {
+        const nbVelo = st.bikes;
+        const popup = `<b>${st.name}</b><br>🚲 ${nbVelo} vélos<br>🅿️ ${st.docks} places`;
+      
+        // Cercle de taille fixe
+        const circle = L.circleMarker([st.lat, st.lon], {
+          radius: 15,           // taille fixe
+          color: 'blue',
+          fillColor: 'blue',
+          fillOpacity: 0.5,
+          weight: 1
+        }).addTo(window.stationLayer);
+      
+        // Popup classique
+        circle.bindPopup(popup);
+      
+        // Tooltip permanent pour afficher le nombre de vélos
+        circle.bindTooltip(`${nbVelo}`, {
+          permanent: true,
+          direction: 'center',
+          className: 'station-tooltip'
+        }).openTooltip();
+      });
+      .station-tooltip {
+        background: rgba(255,255,255,0.8);
+        border-radius: 50%;
+        color: black;
+        font-size: 12px;
+        font-weight: bold;
+        text-align: center;
+        padding: 2px 4px;
+        pointer-events: none; /* pour que le tooltip ne bloque pas le clic sur le cercle */
+      }
 
-  // Cercle de taille fixe
-  const circle = L.circleMarker([st.lat, st.lon], {
-    radius: 15,           // taille fixe
-    color: 'blue',
-    fillColor: 'blue',
-    fillOpacity: 0.5,
-    weight: 1
-  }).addTo(window.stationLayer);
-
-  // Popup classique
-  circle.bindPopup(popup);
-
-  // Tooltip permanent pour afficher le nombre de vélos
-  circle.bindTooltip(`${nbVelo}`, {
-    permanent: true,
-    direction: 'center',
-    className: 'station-tooltip'
-  }).openTooltip();
-});
 
       if (logOverlay) logOverlay.innerHTML = "✅ Dernière mise à jour : " + new Date().toLocaleTimeString();
 
