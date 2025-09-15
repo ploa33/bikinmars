@@ -116,11 +116,29 @@
       window.stationLayer = L.layerGroup().addTo(map);
 
       // Ajouter stations avec popup
-      Object.entries(stations).forEach(([id, st]) => {
-        let popup = `<b>${st.name}</b><br>🚲 ${st.bikes} vélos<br>🅿️ ${st.docks} places`;
-        if (bikesByStation[id]) popup += "<br><br>" + bikesByStation[id].join("<br>");
-        L.marker([st.lat, st.lon]).addTo(window.stationLayer).bindPopup(popup);
-      });
+Object.entries(stations).forEach(([id, st]) => {
+  const nbVelo = st.bikes;
+  const popup = `<b>${st.name}</b><br>🚲 ${nbVelo} vélos<br>🅿️ ${st.docks} places`;
+
+  // Cercle de taille fixe
+  const circle = L.circleMarker([st.lat, st.lon], {
+    radius: 15,           // taille fixe
+    color: 'blue',
+    fillColor: 'blue',
+    fillOpacity: 0.5,
+    weight: 1
+  }).addTo(window.stationLayer);
+
+  // Popup classique
+  circle.bindPopup(popup);
+
+  // Tooltip permanent pour afficher le nombre de vélos
+  circle.bindTooltip(`${nbVelo}`, {
+    permanent: true,
+    direction: 'center',
+    className: 'station-tooltip'
+  }).openTooltip();
+});
 
       if (logOverlay) logOverlay.innerHTML = "✅ Dernière mise à jour : " + new Date().toLocaleTimeString();
 
