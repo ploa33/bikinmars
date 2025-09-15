@@ -2,7 +2,6 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Stations de vélos Marseille</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <!-- Leaflet -->
@@ -136,7 +135,7 @@ async function loadData() {
     bikes.forEach(b => {
       if (b.station_id) {
         const percent = Math.round((b.current_range_meters / MAX_RANGE) * 100);
-        const text = `Vélo - 🔋 ${percent}%`; // <br><a href="https://www.levelo.fr/app/bike/${b.bike_id}" target="_blank">Ouvrir</a>`;
+        const text = `Vélo 🔋 ${percent}%`; // <br><a href="https://www.levelo.fr/app/bike/${b.bike_id}" target="_blank">Ouvrir</a>`;
         if (!bikesByStation[b.station_id]) bikesByStation[b.station_id] = [];
         bikesByStation[b.station_id].push(text);
       }
