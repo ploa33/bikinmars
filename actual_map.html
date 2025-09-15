@@ -53,10 +53,10 @@ const url_bikes  = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs
 
 // Carte
 const map = L.map("map").setView([43.3, 5.38], 13);
-L.tileLayer("https://stamen-tiles.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}.png", {
-  attribution: 'Map tiles by Stamen Design, &copy; OpenStreetMap contributors',
-  maxZoom: 20
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "&copy; OpenStreetMap contributors"
 }).addTo(map);
+
 
 
 // GPS utilisateur
