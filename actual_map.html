@@ -131,7 +131,7 @@ async function loadData() {
     const bikesByStation = {};
     bikes.forEach(b => {
       if (b.station_id) {
-        const dispo = b.is_disabled ? "❌ Cassé" : "✅";
+        const dispo = b.is_disabled ? "❌ Cassé" : "";
         const percent = Math.round((b.current_range_meters / 45000) * 100);
         const text = `Vélo 🔋 ${percent}% ${dispo}`;
         if (!bikesByStation[b.station_id]) bikesByStation[b.station_id] = [];
