@@ -137,9 +137,9 @@ async function loadData() {
         const percent = Math.round((b.current_range_meters / MAX_RANGE) * 100);
     
         // 🔥 Ajout de la dispo selon is_disabled
-        const dispo = b.is_disabled ? "❌ Maintenance" : "✅";
+        const dispo = b.is_disabled ? "❌ Cassé" : "✅";
     
-        const text = `Vélo 🔋 ${percent}% - ${dispo}`;
+        const text = `Vélo 🔋 ${percent}% ${dispo}`;
         if (!bikesByStation[b.station_id]) bikesByStation[b.station_id] = [];
         bikesByStation[b.station_id].push(text);
       }
