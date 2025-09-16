@@ -31,8 +31,8 @@
   /* Tooltip nombre de vélos centré */
   .station-tooltip {
     background: transparent ;
-    border: none !important;            /* pas de bordure */
-    box-shadow: none !important;        /* pas d'ombre */
+    border: none !important;
+    box-shadow: none !important;
     color: black;
     font-size: 12px;
     font-weight: bold;
@@ -50,14 +50,13 @@ const cors = "https://corsproxy.io/?";
 const url_info   = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/station_information.json");
 const url_status = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/station_status.json");
 const url_bikes  = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/free_bike_status.json");
+const url_types  = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/vehicle_types.json");
 
 // Carte
 const map = L.map("map").setView([43.3, 5.38], 13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "&copy; OpenStreetMap contributors"
 }).addTo(map);
-
-
 
 // GPS utilisateur
 L.control.locate({
@@ -110,15 +109,18 @@ async function loadData() {
   if (logOverlay) logOverlay.innerHTML = "⏳ Mise à jour en cours...";
 
   try {
-    const [infoRes, statusRes, bikesRes] = await Promise.all([
+    const [infoRes, statusRes, bikesRes, typesRes] = await Promise.all([
       fetch(url_info).then(r => r.json()),
       fetch(url_status).then(r => r.json()),
-      fetch(url_bikes).then(r => r.json())
+      fetch(url_bikes).then(r => r.json()),
+      fetch(url_types).then(r => r.json())
     ]);
 
     const info = infoRes.data.stations;
     const status = statusRes.data.stations;
     const bikes = bikesRes.data.bikes;
+    const types = {};
+    typesRes.data.vehicle_types.forEach(t => types[t.vehicle_type_id] = t);
 
     const stations = {};
     info.forEach(s => stations[s.station_id] = { name: s.name, lat: s.lat, lon: s.lon, bikes: 0, docks: 0 });
@@ -131,20 +133,17 @@ async function loadData() {
 
     // Vélos par station
     const bikesByStation = {};
-    const MAX_RANGE = 45000;
     bikes.forEach(b => {
       if (b.station_id) {
-        const percent = Math.round((b.current_range_meters / MAX_RANGE) * 100);
-    
-        // 🔥 Ajout de la dispo selon is_disabled
+        const maxRange = types[b.vehicle_type_id]?.max_range_meters || 45000;
+        const percent = Math.round((b.current_range_meters / maxRange) * 100);
         const dispo = b.is_disabled ? "❌ Cassé" : "✅";
-    
-        const text = `Vélo 🔋 ${percent}% ${dispo}`;
+        const model = types[b.vehicle_type_id]?.name || "Inconnu";
+        const text = `${model} 🔋 ${percent}% ${dispo}`;
         if (!bikesByStation[b.station_id]) bikesByStation[b.station_id] = [];
         bikesByStation[b.station_id].push(text);
       }
     });
-
 
     if (window.stationLayer) map.removeLayer(window.stationLayer);
     window.stationLayer = L.layerGroup().addTo(map);
@@ -174,37 +173,33 @@ async function loadData() {
       }).openTooltip();
     });
 
-    if (logOverlay) logOverlay.innerHTML = "✅ Dernière mise à jour : " + new Date().toLocaleTimeString();
+    // 📊 Répartition des vélos par type
+    const counts = {};
+    bikes.forEach(b => {
+      counts[b.vehicle_type_id] = (counts[b.vehicle_type_id] || 0) + 1;
+    });
+
+    const total = bikes.length;
+    const proportions = Object.entries(counts).map(([typeId, count]) => {
+      const typeName = types[typeId]?.name || "Inconnu";
+      const percent = ((count / total) * 100).toFixed(1);
+      return `${typeName} : ${count} vélos (${percent}%)`;
+    });
+
+    console.log("📊 Répartition des vélos :", proportions.join(" | "));
+
+    if (logOverlay) {
+      logOverlay.innerHTML = "✅ Dernière mise à jour : " + new Date().toLocaleTimeString();
+      logOverlay.innerHTML += "<br><br><b>Répartition :</b><br>" + proportions.join("<br>");
+    }
 
   } catch (err) {
+    const logOverlay = document.querySelector('.leaflet-control-log');
     if (logOverlay) logOverlay.innerHTML = "❌ Erreur : " + err;
     console.error(err);
   }
 }
-// Compter le nombre de vélos par type
-const counts = {};
-bikes.forEach(b => {
-  const typeId = b.vehicle_type_id;
-  counts[typeId] = (counts[typeId] || 0) + 1;
-});
 
-// Calcul des proportions
-const total = bikes.length;
-const proportions = Object.entries(counts).map(([typeId, count]) => {
-  const typeName = types[typeId]?.name || "Inconnu";
-  const percent = ((count / total) * 100).toFixed(1);
-  return `${typeName} : ${count} vélos (${percent}%)`;
-});
-
-// Affichage dans la console
-console.log("📊 Répartition des vélos :", proportions.join(" | "));
-
-// Optionnel : affichage dans ton overlay log
-if (logOverlay) {
-  logOverlay.innerHTML += "<br><br><b>Répartition :</b><br>" + proportions.join("<br>");
-}
-
-  
 // Refresh toutes les 2 minutes
 function refresh() {
   loadData();
