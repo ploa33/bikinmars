@@ -181,7 +181,30 @@ async function loadData() {
     console.error(err);
   }
 }
+// Compter le nombre de vélos par type
+const counts = {};
+bikes.forEach(b => {
+  const typeId = b.vehicle_type_id;
+  counts[typeId] = (counts[typeId] || 0) + 1;
+});
 
+// Calcul des proportions
+const total = bikes.length;
+const proportions = Object.entries(counts).map(([typeId, count]) => {
+  const typeName = types[typeId]?.name || "Inconnu";
+  const percent = ((count / total) * 100).toFixed(1);
+  return `${typeName} : ${count} vélos (${percent}%)`;
+});
+
+// Affichage dans la console
+console.log("📊 Répartition des vélos :", proportions.join(" | "));
+
+// Optionnel : affichage dans ton overlay log
+if (logOverlay) {
+  logOverlay.innerHTML += "<br><br><b>Répartition :</b><br>" + proportions.join("<br>");
+}
+
+  
 // Refresh toutes les 2 minutes
 function refresh() {
   loadData();
