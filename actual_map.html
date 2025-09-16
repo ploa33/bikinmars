@@ -50,7 +50,6 @@ const cors = "https://corsproxy.io/?";
 const url_info   = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/station_information.json");
 const url_status = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/station_status.json");
 const url_bikes  = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/free_bike_status.json");
-const url_types  = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/vehicle_types.json");
 
 // Carte
 const map = L.map("map").setView([43.3, 5.38], 13);
@@ -109,18 +108,15 @@ async function loadData() {
   if (logOverlay) logOverlay.innerHTML = "⏳ Mise à jour en cours...";
 
   try {
-    const [infoRes, statusRes, bikesRes, typesRes] = await Promise.all([
+    const [infoRes, statusRes, bikesRes] = await Promise.all([
       fetch(url_info).then(r => r.json()),
       fetch(url_status).then(r => r.json()),
-      fetch(url_bikes).then(r => r.json()),
-      fetch(url_types).then(r => r.json())
+      fetch(url_bikes).then(r => r.json())
     ]);
 
     const info = infoRes.data.stations;
     const status = statusRes.data.stations;
     const bikes = bikesRes.data.bikes;
-    const types = {};
-    typesRes.data.vehicle_types.forEach(t => types[t.vehicle_type_id] = t);
 
     const stations = {};
     info.forEach(s => stations[s.station_id] = { name: s.name, lat: s.lat, lon: s.lon, bikes: 0, docks: 0 });
@@ -135,10 +131,9 @@ async function loadData() {
     const bikesByStation = {};
     bikes.forEach(b => {
       if (b.station_id) {
-        const maxRange = types[b.vehicle_type_id]?.max_range_meters || 45000;
-        const percent = Math.round((b.current_range_meters / maxRange) * 100);
         const dispo = b.is_disabled ? "❌ Cassé" : "✅";
-        const text = `$Vélo 🔋 ${percent}% ${dispo}`;
+        const percent = Math.round((b.current_range_meters / 45000) * 100);
+        const text = `Vélo 🔋 ${percent}% ${dispo}`;
         if (!bikesByStation[b.station_id]) bikesByStation[b.station_id] = [];
         bikesByStation[b.station_id].push(text);
       }
@@ -174,11 +169,9 @@ async function loadData() {
 
     if (logOverlay) {
       logOverlay.innerHTML = "✅ Dernière mise à jour : " + new Date().toLocaleTimeString();
-      logOverlay.innerHTML += "<br><br><b>Répartition :</b><br>" + proportions.join("<br>");
     }
 
   } catch (err) {
-    const logOverlay = document.querySelector('.leaflet-control-log');
     if (logOverlay) logOverlay.innerHTML = "❌ Erreur : " + err;
     console.error(err);
   }
