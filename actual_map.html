@@ -138,8 +138,7 @@ async function loadData() {
         const maxRange = types[b.vehicle_type_id]?.max_range_meters || 45000;
         const percent = Math.round((b.current_range_meters / maxRange) * 100);
         const dispo = b.is_disabled ? "❌ Cassé" : "✅";
-        const model = types[b.vehicle_type_id]?.name || "Inconnu";
-        const text = `${model} 🔋 ${percent}% ${dispo}`;
+        const text = `$Vélo 🔋 ${percent}% ${dispo}`;
         if (!bikesByStation[b.station_id]) bikesByStation[b.station_id] = [];
         bikesByStation[b.station_id].push(text);
       }
@@ -172,21 +171,6 @@ async function loadData() {
         fillOpacity: 0,
       }).openTooltip();
     });
-
-    // 📊 Répartition des vélos par type
-    const counts = {};
-    bikes.forEach(b => {
-      counts[b.vehicle_type_id] = (counts[b.vehicle_type_id] || 0) + 1;
-    });
-
-    const total = bikes.length;
-    const proportions = Object.entries(counts).map(([typeId, count]) => {
-      const typeName = types[typeId]?.name || "Inconnu";
-      const percent = ((count / total) * 100).toFixed(1);
-      return `${typeName} : ${count} vélos (${percent}%)`;
-    });
-
-    console.log("📊 Répartition des vélos :", proportions.join(" | "));
 
     if (logOverlay) {
       logOverlay.innerHTML = "✅ Dernière mise à jour : " + new Date().toLocaleTimeString();
