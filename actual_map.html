@@ -135,11 +135,16 @@ async function loadData() {
     bikes.forEach(b => {
       if (b.station_id) {
         const percent = Math.round((b.current_range_meters / MAX_RANGE) * 100);
-        const text = `Vélo 🔋 ${percent}%`; // <br><a href="https://www.levelo.fr/app/bike/${b.bike_id}" target="_blank">Ouvrir</a>`;
+    
+        // 🔥 Ajout de la dispo selon is_disabled
+        const dispo = b.is_disabled ? "❌ Maintenance" : "✅";
+    
+        const text = `Vélo 🔋 ${percent}% - ${dispo}`;
         if (!bikesByStation[b.station_id]) bikesByStation[b.station_id] = [];
         bikesByStation[b.station_id].push(text);
       }
     });
+
 
     if (window.stationLayer) map.removeLayer(window.stationLayer);
     window.stationLayer = L.layerGroup().addTo(map);
