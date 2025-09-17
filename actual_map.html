@@ -33,7 +33,7 @@
     background: transparent ;
     border: none !important;
     box-shadow: none !important;
-    color: black;
+    color: ;
     font-size: 12px;
     font-weight: bold;
     text-align: center;
@@ -152,10 +152,10 @@ async function loadData() {
 
       const circle = L.circleMarker([st.lat, st.lon], {
         radius: 15,
-        color: 'blue',
-        fillColor: 'blue',
-        fillOpacity: 0.1,
-        weight: 1
+        color: trasnparent,
+        fillColor: 'orange',
+        fillOpacity: 0.6,
+        weight: 1.5
       }).addTo(window.stationLayer);
 
       circle.bindPopup(popup);
