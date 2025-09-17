@@ -4,46 +4,42 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<!-- Leaflet -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-<!-- Leaflet Locate plugin -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.css" />
-<script src="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.js"></script>
+<!-- MapLibre GL -->
+<link href="https://unpkg.com/maplibre-gl@3.6.0/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@3.6.0/dist/maplibre-gl.js"></script>
 
 <style>
   html, body { margin: 0; height: 100%; }
   #map { width: 100%; height: 100%; }
 
   /* Overlay log en bas à gauche */
-  .leaflet-control-log {
+  .map-log {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
     background: rgba(255, 255, 255, 0.9);
     padding: 6px 10px;
     border-radius: 5px;
     font-size: 12px;
     box-shadow: 0 0 5px rgba(0,0,0,0.3);
     pointer-events: none;
-    margin: 10px;
     z-index: 1000;
   }
 
-  /* Tooltip nombre de vélos centré */
-  .station-tooltip {
-    background: transparent ;
-    border: none !important;
-    box-shadow: none !important;
-    color: black;
+  /* Tooltip nombre de vélos centré sur station */
+  .station-label {
+    position: absolute;
+    transform: translate(-50%, -50%);
     font-size: 12px;
     font-weight: bold;
-    text-align: center;
-    padding: 0;
+    color: black;
     pointer-events: none;
   }
 </style>
 </head>
 <body>
 <div id="map"></div>
+<div id="log" class="map-log">Chargement...</div>
 
 <script>
 const cors = "https://corsproxy.io/?";
@@ -51,61 +47,36 @@ const url_info   = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs
 const url_status = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/station_status.json");
 const url_bikes  = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/free_bike_status.json");
 
-// Carte
-const map = L.map("map").setView([43.3, 5.38], 13);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  attribution: "&copy; OpenStreetMap contributors"
-}).addTo(map);
+// Carte MapLibre
+const map = new maplibregl.Map({
+  container: "map",
+  style: "https://demotiles.maplibre.org/style.json", // fond OSM libre
+  center: [5.38, 43.3],
+  zoom: 13
+});
+
+// Contrôles navigation (zoom, rotation)
+map.addControl(new maplibregl.NavigationControl(), "top-right");
 
 // GPS utilisateur
-L.control.locate({
-  position: "topleft",
-  strings: { title: "Ma position" },
-  flyTo: true,
-  locateOptions: { enableHighAccuracy: true }
-}).addTo(map);
-
-let userMarker;
 if (navigator.geolocation) {
   navigator.geolocation.watchPosition(
     (pos) => {
       const lat = pos.coords.latitude;
       const lon = pos.coords.longitude;
-      if (userMarker) userMarker.setLatLng([lat, lon]);
-      else {
-        userMarker = L.marker([lat, lon], {
-          icon: L.icon({
-            iconUrl: 'https://cdn-icons-png.flaticon.com/512/64/64113.png',
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-          })
-        }).addTo(map).bindPopup("<b>Ma position</b>").openPopup();
-      }
-      if (!map._centeredOnUser) {
-        map.setView([lat, lon], 14);
-        map._centeredOnUser = true;
-      }
+      new maplibregl.Marker({ color: "red" })
+        .setLngLat([lon, lat])
+        .setPopup(new maplibregl.Popup().setText("Ma position"))
+        .addTo(map);
     },
     (err) => console.warn("Erreur GPS :", err),
     { enableHighAccuracy: true, maximumAge: 1000 }
   );
 }
 
-// Overlay log
-const LogControl = L.Control.extend({
-  onAdd: function(map) {
-    const div = L.DomUtil.create('div', 'leaflet-control-log');
-    div.innerHTML = "Chargement...";
-    L.DomEvent.disableClickPropagation(div);
-    return div;
-  }
-});
-const logControl = new LogControl({ position: 'bottomleft' }).addTo(map);
-
-// Charger données
 async function loadData() {
-  const logOverlay = document.querySelector('.leaflet-control-log');
-  if (logOverlay) logOverlay.innerHTML = "⏳ Mise à jour en cours...";
+  const logOverlay = document.getElementById("log");
+  logOverlay.innerHTML = "⏳ Mise à jour en cours...";
 
   try {
     const [infoRes, statusRes, bikesRes] = await Promise.all([
@@ -127,7 +98,6 @@ async function loadData() {
       }
     });
 
-    // Vélos par station
     const bikesByStation = {};
     bikes.forEach(b => {
       if (b.station_id) {
@@ -139,10 +109,13 @@ async function loadData() {
       }
     });
 
-    if (window.stationLayer) map.removeLayer(window.stationLayer);
-    window.stationLayer = L.layerGroup().addTo(map);
+    // Supprimer anciens marqueurs
+    if (window.stationMarkers) {
+      window.stationMarkers.forEach(m => m.remove());
+    }
+    window.stationMarkers = [];
 
-    // Ajouter cercles stations
+    // Ajouter stations
     Object.entries(stations).forEach(([id, st]) => {
       const nbVelo = st.bikes;
       let popup = `<b>${st.name}</b><br>🚲 ${nbVelo} vélos<br>🅿️ ${st.docks} places`;
@@ -150,40 +123,27 @@ async function loadData() {
         popup += "<br><br><b>Vélos disponibles :</b><br>" + bikesByStation[id].join("<br>");
       }
 
-      const circle = L.circleMarker([st.lat, st.lon], {
-        radius: 15,
-        color: 'blue',
-        fillColor: 'blue',
-        fillOpacity: 0.1,
-        weight: 1
-      }).addTo(window.stationLayer);
+      const marker = new maplibregl.Marker({ color: "blue" })
+        .setLngLat([st.lon, st.lat])
+        .setPopup(new maplibregl.Popup().setHTML(popup))
+        .addTo(map);
 
-      circle.bindPopup(popup);
-      circle.bindTooltip(`${nbVelo}`, {
-        permanent: true,
-        direction: 'center',
-        className: 'station-tooltip',
-        fillOpacity: 0,
-      }).openTooltip();
+      window.stationMarkers.push(marker);
     });
 
-    if (logOverlay) {
-      logOverlay.innerHTML = "✅ Dernière mise à jour : " + new Date().toLocaleTimeString();
-    }
-
+    logOverlay.innerHTML = "✅ Dernière mise à jour : " + new Date().toLocaleTimeString();
   } catch (err) {
-    if (logOverlay) logOverlay.innerHTML = "❌ Erreur : " + err;
+    document.getElementById("log").innerHTML = "❌ Erreur : " + err;
     console.error(err);
   }
 }
 
-// Refresh toutes les 2 minutes
+// Rafraîchissement
 function refresh() {
   loadData();
   setTimeout(refresh, 120000);
 }
 refresh();
-
 </script>
 </body>
 </html>
