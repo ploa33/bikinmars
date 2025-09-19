@@ -8,167 +8,100 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-<!-- Leaflet Locate plugin -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.css" />
-<script src="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.js"></script>
-
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-<!-- Supabase JS -->
-<script type="module">
-  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
-
-  // 🔑 Remplace par ton URL et ta clé publique Supabase
-  const SUPABASE_URL = 'https://sckcrxxexizruylcsoec.supabase.co';
-  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNja2NyeHhleGl6cnV5bGNzb2VjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgyNjgzNDMsImV4cCI6MjA3Mzg0NDM0M30.nTuTXKfi2_hE5KkR_NWROqWIc5klVqLMlV_MOp-lA3c';
-  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-  window.supabase = supabase;
-</script>
-
 <style>
-html, body { margin:0; height:100%; }
-#map { width:100%; height:100%; }
-
-.leaflet-control-log {
-  background: rgba(255,255,255,0.9);
-  padding: 6px 10px;
-  border-radius: 5px;
-  font-size: 14px;
-  box-shadow: 0 0 5px rgba(0,0,0,0.3);
-  pointer-events: none;
-  margin: 10px;
-  z-index: 1000;
-}
-
-.station-tooltip {
-  background: transparent;
-  border: none !important;
-  box-shadow: none !important;
-  color: white;
-  font-size: 16px;
-  font-weight: bold;
-  text-align: center;
-  padding: 0;
-  pointer-events: none;
-}
+  html, body { margin: 0; height: 100%; }
+  #map { width: 100%; height: 100%; }
+  .station-tooltip {
+    background: transparent;
+    border: none !important;
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    text-align: center;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
 <div id="map"></div>
 
 <script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
 // ----------------------------
+// CONFIGURATION SUPABASE
+// ----------------------------
+const supabaseUrl = 'https://YOUR_PROJECT_REF.supabase.co';
+const supabaseKey = 'YOUR_PUBLIC_ANON_KEY';
+const supabase = createClient(supabaseUrl, supabaseKey);
+
 // Carte Leaflet
-// ----------------------------
-const map = L.map("map").setView([43.3,5.38], 13);
+const map = L.map("map").setView([43.3, 5.38], 13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "&copy; OpenStreetMap contributors"
 }).addTo(map);
 
-// GPS utilisateur
-L.control.locate({position:"topleft", strings:{title:"Ma position"}, flyTo:true, locateOptions:{enableHighAccuracy:true}}).addTo(map);
+// ----------------------------
+// Fonction pour afficher la carte
+// ----------------------------
+async function loadMapData() {
+  try {
+    // 1️⃣ Récupérer toutes les stations
+    const { data: stations, error: stationsError } = await supabase
+      .from('station_info')
+      .select('*');
 
-// Overlay log
-const LogControl = L.Control.extend({
-  onAdd: function(map) {
-    const div = L.DomUtil.create('div','leaflet-control-log');
-    div.innerHTML = "Chargement...";
-    L.DomEvent.disableClickPropagation(div);
-    return div;
+    if (stationsError) return console.error('Erreur stations:', stationsError);
+
+    // 2️⃣ Récupérer les vélos récents
+    const { data: bikes, error: bikesError } = await supabase
+      .from('bike_data')
+      .select('*');
+
+    if (bikesError) return console.error('Erreur vélos:', bikesError);
+
+    // Créer un layer group pour stations
+    const stationLayer = L.layerGroup().addTo(map);
+
+    stations.forEach(st => {
+      // Vélos à cette station
+      const bikesHere = bikes.filter(b => b.station_id === st.station_id);
+      const nbVelo = bikesHere.length;
+
+      let popup = `<b>${st.name}</b><br>🚲 ${nbVelo} vélos disponibles`;
+
+      if (nbVelo > 0) {
+        popup += "<br><ul>";
+        bikesHere.forEach(b => {
+          popup += `<li>${b.bike_id} 🔋 ${b.battery}%</li>`;
+        });
+        popup += "</ul>";
+      }
+
+      const circle = L.circleMarker([st.lat, st.lon], {
+        radius: 12,
+        color: '#E94E1B',
+        fillColor: '#E94E1B',
+        fillOpacity: 0.8,
+        weight: 0
+      }).addTo(stationLayer);
+
+      circle.bindPopup(popup);
+      circle.bindTooltip(`${nbVelo}`, {
+        permanent: true,
+        direction: 'center',
+        className: 'station-tooltip'
+      }).openTooltip();
+    });
+
+  } catch (err) {
+    console.error('Erreur loadMapData:', err);
   }
-});
-const logControl = new LogControl({position:'bottomleft'}).addTo(map);
-
-// ----------------------------
-// Affichage historique vélo
-// ----------------------------
-async function showBikeHistory(bike_id) {
-  const { data, error } = await supabase
-    .from('bike_data')
-    .select('timestamp,battery,range_meters,station_id,is_boomerang')
-    .eq('bike_id', bike_id)
-    .gte('timestamp', new Date(Date.now()-24*60*60*1000).toISOString())
-    .order('timestamp',{ascending:true});
-
-  if(error) return console.error(error);
-
-  let historyWindow = window.open('','_blank','width=600,height=400');
-  historyWindow.document.write('<canvas id="bikeHistory" width="580" height="380"></canvas>');
-
-  const ctx = historyWindow.document.getElementById('bikeHistory').getContext('2d');
-  new Chart(ctx,{
-    type:'line',
-    data:{
-      labels:data.map(d=>new Date(d.timestamp).toLocaleTimeString()),
-      datasets:[
-        {label:'Batterie (%)', data:data.map(d=>d.battery), borderColor:'blue', fill:false},
-        {label:'Autonomie (m)', data:data.map(d=>d.range_meters), borderColor:'green', fill:false}
-      ]
-    },
-    options:{responsive:true, plugins:{legend:{position:'top'}}}
-  });
 }
 
-// ----------------------------
-// Charger et afficher stations + vélos
-// ----------------------------
-async function loadStationsAndBikes() {
-  const logOverlay = document.querySelector('.leaflet-control-log');
-  logOverlay.innerHTML = "⏳ Chargement...";
-
-  // Stations
-  const { data: stations, error: stationErr } = await supabase
-    .from('station_info')
-    .select('*');
-
-  if(stationErr) { logOverlay.innerHTML="❌ Erreur stations"; console.error(stationErr); return; }
-
-  // Vélos
-  const { data: bikes, error: bikeErr } = await supabase
-    .from('bike_data')
-    .select('*')
-    .order('timestamp',{ascending:false});
-
-  if(bikeErr) { logOverlay.innerHTML="❌ Erreur vélos"; console.error(bikeErr); return; }
-
-  if(window.stationLayer) map.removeLayer(window.stationLayer);
-  window.stationLayer = L.layerGroup().addTo(map);
-
-  // Carte stations
-  stations.forEach(st => {
-    const bikesAtStation = bikes.filter(b=>b.station_id===st.station_id);
-    const nbVelo = bikesAtStation.length;
-    let popup = `<b>${st.name}</b><br>🚲 ${nbVelo} vélos`;
-    if(nbVelo>0){
-      popup += '<br><b>Vélos:</b><br>';
-      bikesAtStation.forEach(b=>{
-        popup += `ID: ${b.bike_id}, 🔋 ${b.battery}%`;
-        if(b.is_boomerang) popup += ' ⚡';
-        popup += `<br>`;
-      });
-      popup += `<br><button onclick="showBikeHistory('${bikesAtStation[0].bike_id}')">Voir historique 24h</button>`;
-    }
-
-    const circle = L.circleMarker([st.lat, st.lon], {
-      radius:15,
-      color:'#E94E1B',
-      fillColor:'#E94E1B',
-      fillOpacity:0.8,
-      weight:0
-    }).addTo(window.stationLayer);
-
-    circle.bindPopup(popup);
-    circle.bindTooltip(`${nbVelo}`, {permanent:true,direction:'center',className:'station-tooltip'}).openTooltip();
-  });
-
-  logOverlay.innerHTML = "✅ Dernière mise à jour : "+new Date().toLocaleTimeString();
-}
-
-// Refresh toutes les minutes
-async function refresh() { await loadStationsAndBikes(); setTimeout(refresh,60000);}
-refresh();
-
+// Refresh toutes les 1 min
+loadMapData();
+setInterval(loadMapData, 60_000);
 </script>
 </body>
 </html>
