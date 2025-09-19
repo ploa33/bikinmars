@@ -12,24 +12,26 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.css" />
 <script src="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.js"></script>
 
-<!-- Chart.js pour historique -->
+<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<!-- Supabase -->
+<!-- Supabase JS -->
 <script type="module">
   import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
 
-  const supabaseUrl = 'https://YOUR_SUPABASE_URL.supabase.co';
-  const supabaseKey = 'YOUR_SUPABASE_PUBLIC_ANON_KEY';
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  // 🔑 Remplace par ton URL et ta clé publique Supabase
+  const SUPABASE_URL = 'https://YOUR_PROJECT_REF.supabase.co';
+  const SUPABASE_KEY = 'YOUR_PUBLIC_ANON_KEY';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
   window.supabase = supabase;
 </script>
 
 <style>
-html, body { margin: 0; height: 100%; }
-#map { width: 100%; height: 100%; }
+html, body { margin:0; height:100%; }
+#map { width:100%; height:100%; }
+
 .leaflet-control-log {
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255,255,255,0.9);
   padding: 6px 10px;
   border-radius: 5px;
   font-size: 14px;
@@ -38,6 +40,7 @@ html, body { margin: 0; height: 100%; }
   margin: 10px;
   z-index: 1000;
 }
+
 .station-tooltip {
   background: transparent;
   border: none !important;
@@ -55,109 +58,115 @@ html, body { margin: 0; height: 100%; }
 <div id="map"></div>
 
 <script type="module">
+// ----------------------------
+// Carte Leaflet
+// ----------------------------
+const map = L.map("map").setView([43.3,5.38], 13);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "&copy; OpenStreetMap contributors"
+}).addTo(map);
 
-// Initialisation carte
-const map = L.map("map").setView([43.3, 5.38], 13);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors" }).addTo(map);
-L.control.locate({ position: "topleft", strings: { title: "Ma position" }, flyTo: true, locateOptions: { enableHighAccuracy: true } }).addTo(map);
+// GPS utilisateur
+L.control.locate({position:"topleft", strings:{title:"Ma position"}, flyTo:true, locateOptions:{enableHighAccuracy:true}}).addTo(map);
 
 // Overlay log
-const logOverlay = L.DomUtil.create('div', 'leaflet-control-log');
-logOverlay.innerHTML = "Chargement...";
-document.body.appendChild(logOverlay);
+const LogControl = L.Control.extend({
+  onAdd: function(map) {
+    const div = L.DomUtil.create('div','leaflet-control-log');
+    div.innerHTML = "Chargement...";
+    L.DomEvent.disableClickPropagation(div);
+    return div;
+  }
+});
+const logControl = new LogControl({position:'bottomleft'}).addTo(map);
 
-// --- Affichage historique vélo ---
+// ----------------------------
+// Affichage historique vélo
+// ----------------------------
 async function showBikeHistory(bike_id) {
-  const { data, error } = await window.supabase
+  const { data, error } = await supabase
     .from('bike_data')
-    .select('timestamp,battery,range_meters,station_id')
+    .select('timestamp,battery,range_meters,station_id,is_boomerang')
     .eq('bike_id', bike_id)
-    .gte('timestamp', new Date(Date.now() - 24*60*60*1000).toISOString())
-    .order('timestamp', { ascending: true });
-  if (error) return console.error(error);
+    .gte('timestamp', new Date(Date.now()-24*60*60*1000).toISOString())
+    .order('timestamp',{ascending:true});
 
-  let historyWindow = window.open('', '_blank', 'width=600,height=400');
+  if(error) return console.error(error);
+
+  let historyWindow = window.open('','_blank','width=600,height=400');
   historyWindow.document.write('<canvas id="bikeHistory" width="580" height="380"></canvas>');
-  const ctx = historyWindow.document.getElementById('bikeHistory').getContext('2d');
 
-  new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: data.map(d => new Date(d.timestamp).toLocaleTimeString()),
-      datasets: [
-        { label: 'Batterie (%)', data: data.map(d => d.battery), borderColor: 'blue', fill: false },
-        { label: 'Autonomie (m)', data: data.map(d => d.range_meters), borderColor: 'green', fill: false }
+  const ctx = historyWindow.document.getElementById('bikeHistory').getContext('2d');
+  new Chart(ctx,{
+    type:'line',
+    data:{
+      labels:data.map(d=>new Date(d.timestamp).toLocaleTimeString()),
+      datasets:[
+        {label:'Batterie (%)', data:data.map(d=>d.battery), borderColor:'blue', fill:false},
+        {label:'Autonomie (m)', data:data.map(d=>d.range_meters), borderColor:'green', fill:false}
       ]
     },
-    options: { responsive: true, plugins: { legend: { position: 'top' } } }
+    options:{responsive:true, plugins:{legend:{position:'top'}}}
   });
 }
 
-// --- Chargement des données ---
-async function loadData() {
-  logOverlay.innerHTML = "⏳ Chargement en cours...";
+// ----------------------------
+// Charger et afficher stations + vélos
+// ----------------------------
+async function loadStationsAndBikes() {
+  const logOverlay = document.querySelector('.leaflet-control-log');
+  logOverlay.innerHTML = "⏳ Chargement...";
 
-  try {
-    // Stations
-    const { data: stationsInfo, error: stationsError } = await supabase
-      .from('station_info')
-      .select('station_id,name,lat,lon');
-    if (stationsError) throw stationsError;
+  // Stations
+  const { data: stations, error: stationErr } = await supabase
+    .from('station_info')
+    .select('*');
 
-    const stationsMap = {};
-    stationsInfo.forEach(s => stationsMap[s.station_id] = s);
+  if(stationErr) { logOverlay.innerHTML="❌ Erreur stations"; console.error(stationErr); return; }
 
-    // Vélos (dernière donnée par bike)
-    const { data: bikes, error: bikesError } = await supabase
-      .from('bike_data')
-      .select('bike_id,station_id,battery,range_meters,is_boomerang,timestamp')
-      .order('timestamp', { ascending: false })
-      .limit(1000);
-    if (bikesError) throw bikesError;
+  // Vélos
+  const { data: bikes, error: bikeErr } = await supabase
+    .from('bike_data')
+    .select('*')
+    .order('timestamp',{ascending:false});
 
-    if (window.stationLayer) map.removeLayer(window.stationLayer);
-    window.stationLayer = L.layerGroup().addTo(map);
+  if(bikeErr) { logOverlay.innerHTML="❌ Erreur vélos"; console.error(bikeErr); return; }
 
-    // Grouper vélos par station
-    const stations = {};
-    bikes.forEach(b => {
-      const st = stationsMap[b.station_id];
-      if (!st) return; // ignore si station inconnue
-      if (!stations[b.station_id]) stations[b.station_id] = { bikes: [], lat: st.lat, lon: st.lon, name: st.name };
-      stations[b.station_id].bikes.push(b);
-    });
+  if(window.stationLayer) map.removeLayer(window.stationLayer);
+  window.stationLayer = L.layerGroup().addTo(map);
 
-    // Affichage carte
-    Object.entries(stations).forEach(([id, st]) => {
-      const nbVelo = st.bikes.length;
-      let popup = `<b>${st.name}</b><br>🚲 ${nbVelo} vélos`;
-
-      st.bikes.forEach(b => {
-        const boomerangFlag = b.is_boomerang ? " ⚠️ Boomerang" : "";
-        popup += `<br>Vélo ${b.bike_id}${boomerangFlag} <button onclick="showBikeHistory('${b.bike_id}')">Historique 24h</button>`;
+  // Carte stations
+  stations.forEach(st => {
+    const bikesAtStation = bikes.filter(b=>b.station_id===st.station_id);
+    const nbVelo = bikesAtStation.length;
+    let popup = `<b>${st.name}</b><br>🚲 ${nbVelo} vélos`;
+    if(nbVelo>0){
+      popup += '<br><b>Vélos:</b><br>';
+      bikesAtStation.forEach(b=>{
+        popup += `ID: ${b.bike_id}, 🔋 ${b.battery}%`;
+        if(b.is_boomerang) popup += ' ⚡';
+        popup += `<br>`;
       });
+      popup += `<br><button onclick="showBikeHistory('${bikesAtStation[0].bike_id}')">Voir historique 24h</button>`;
+    }
 
-      const circle = L.circleMarker([st.lat, st.lon], {
-        radius: 15,
-        color: '#E94E1B',
-        fillColor: '#E94E1B',
-        fillOpacity: 0.8,
-        weight: 0
-      }).addTo(window.stationLayer);
+    const circle = L.circleMarker([st.lat, st.lon], {
+      radius:15,
+      color:'#E94E1B',
+      fillColor:'#E94E1B',
+      fillOpacity:0.8,
+      weight:0
+    }).addTo(window.stationLayer);
 
-      circle.bindPopup(popup);
-      circle.bindTooltip(`${nbVelo}`, { permanent: true, direction: 'center', className: 'station-tooltip' }).openTooltip();
-    });
+    circle.bindPopup(popup);
+    circle.bindTooltip(`${nbVelo}`, {permanent:true,direction:'center',className:'station-tooltip'}).openTooltip();
+  });
 
-    logOverlay.innerHTML = "✅ Dernière mise à jour : " + new Date().toLocaleTimeString();
-  } catch (err) {
-    logOverlay.innerHTML = "❌ Erreur : " + err;
-    console.error(err);
-  }
+  logOverlay.innerHTML = "✅ Dernière mise à jour : "+new Date().toLocaleTimeString();
 }
 
-// Refresh automatique toutes les 2 minutes
-function refresh() { loadData(); setTimeout(refresh, 120000); }
+// Refresh toutes les minutes
+async function refresh() { await loadStationsAndBikes(); setTimeout(refresh,60000);}
 refresh();
 
 </script>
