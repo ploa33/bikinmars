@@ -26,44 +26,47 @@
 </script>
 
 <style>
-  html, body { margin: 0; height: 100%; }
-  #map { width: 100%; height: 100%; }
-  .leaflet-control-log {
-    background: rgba(255, 255, 255, 0.9);
-    padding: 6px 10px;
-    border-radius: 5px;
-    font-size: 14px;
-    box-shadow: 0 0 5px rgba(0,0,0,0.3);
-    pointer-events: none;
-    margin: 10px;
-    z-index: 1000;
-  }
-  .station-tooltip {
-    background: transparent;
-    border: none !important;
-    box-shadow: none !important;
-    color: white;
-    font-size: 16px;
-    font-weight: bold;
-    text-align: center;
-    padding: 0;
-    pointer-events: none;
-  }
+html, body { margin: 0; height: 100%; }
+#map { width: 100%; height: 100%; }
+.leaflet-control-log {
+  background: rgba(255, 255, 255, 0.9);
+  padding: 6px 10px;
+  border-radius: 5px;
+  font-size: 14px;
+  box-shadow: 0 0 5px rgba(0,0,0,0.3);
+  pointer-events: none;
+  margin: 10px;
+  z-index: 1000;
+}
+.station-tooltip {
+  background: transparent;
+  border: none !important;
+  box-shadow: none !important;
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+  text-align: center;
+  padding: 0;
+  pointer-events: none;
+}
 </style>
 </head>
 <body>
 <div id="map"></div>
 
 <script type="module">
+
+// Initialisation carte
 const map = L.map("map").setView([43.3, 5.38], 13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors" }).addTo(map);
-
 L.control.locate({ position: "topleft", strings: { title: "Ma position" }, flyTo: true, locateOptions: { enableHighAccuracy: true } }).addTo(map);
 
-let logOverlay = L.DomUtil.create('div', 'leaflet-control-log');
+// Overlay log
+const logOverlay = L.DomUtil.create('div', 'leaflet-control-log');
 logOverlay.innerHTML = "Chargement...";
 document.body.appendChild(logOverlay);
 
+// --- Affichage historique vélo ---
 async function showBikeHistory(bike_id) {
   const { data, error } = await window.supabase
     .from('bike_data')
@@ -90,35 +93,58 @@ async function showBikeHistory(bike_id) {
   });
 }
 
+// --- Chargement des données ---
 async function loadData() {
-  logOverlay.innerHTML = "⏳ Mise à jour en cours...";
-  try {
-    const { data: bikes, error } = await window.supabase
-      .from('bike_data')
-      .select('bike_id,station_id,battery,range_meters')
-      .order('timestamp', { ascending: false })
-      .limit(500); // Limite pour ne pas surcharger la page
+  logOverlay.innerHTML = "⏳ Chargement en cours...";
 
-    if (error) throw error;
+  try {
+    // Stations
+    const { data: stationsInfo, error: stationsError } = await supabase
+      .from('station_info')
+      .select('station_id,name,lat,lon');
+    if (stationsError) throw stationsError;
+
+    const stationsMap = {};
+    stationsInfo.forEach(s => stationsMap[s.station_id] = s);
+
+    // Vélos (dernière donnée par bike)
+    const { data: bikes, error: bikesError } = await supabase
+      .from('bike_data')
+      .select('bike_id,station_id,battery,range_meters,is_boomerang,timestamp')
+      .order('timestamp', { ascending: false })
+      .limit(1000);
+    if (bikesError) throw bikesError;
 
     if (window.stationLayer) map.removeLayer(window.stationLayer);
     window.stationLayer = L.layerGroup().addTo(map);
 
-    // Grouper par station
+    // Grouper vélos par station
     const stations = {};
     bikes.forEach(b => {
-      if (!stations[b.station_id]) stations[b.station_id] = { bikes: [], lat: 43.3, lon: 5.38 }; // lat/lon à ajuster si tu as coords réelles
+      const st = stationsMap[b.station_id];
+      if (!st) return; // ignore si station inconnue
+      if (!stations[b.station_id]) stations[b.station_id] = { bikes: [], lat: st.lat, lon: st.lon, name: st.name };
       stations[b.station_id].bikes.push(b);
     });
 
+    // Affichage carte
     Object.entries(stations).forEach(([id, st]) => {
       const nbVelo = st.bikes.length;
-      let popup = `<b>Station ${id}</b><br>🚲 ${nbVelo} vélos`;
+      let popup = `<b>${st.name}</b><br>🚲 ${nbVelo} vélos`;
+
       st.bikes.forEach(b => {
-        popup += `<br>Vélo ${b.bike_id}<button onclick="showBikeHistory('${b.bike_id}')">Voir historique 24h</button>`;
+        const boomerangFlag = b.is_boomerang ? " ⚠️ Boomerang" : "";
+        popup += `<br>Vélo ${b.bike_id}${boomerangFlag} <button onclick="showBikeHistory('${b.bike_id}')">Historique 24h</button>`;
       });
 
-      const circle = L.circleMarker([st.lat, st.lon], { radius: 15, color: '#E94E1B', fillColor: '#E94E1B', fillOpacity: 0.8, weight: 0 }).addTo(window.stationLayer);
+      const circle = L.circleMarker([st.lat, st.lon], {
+        radius: 15,
+        color: '#E94E1B',
+        fillColor: '#E94E1B',
+        fillOpacity: 0.8,
+        weight: 0
+      }).addTo(window.stationLayer);
+
       circle.bindPopup(popup);
       circle.bindTooltip(`${nbVelo}`, { permanent: true, direction: 'center', className: 'station-tooltip' }).openTooltip();
     });
@@ -130,7 +156,7 @@ async function loadData() {
   }
 }
 
-// Refresh toutes les 2 minutes
+// Refresh automatique toutes les 2 minutes
 function refresh() { loadData(); setTimeout(refresh, 120000); }
 refresh();
 
