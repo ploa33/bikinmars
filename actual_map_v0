@@ -1,269 +1,195 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<!-- Leaflet -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-<!-- Leaflet Locate plugin -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.css" />
-<script src="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.js"></script>
+    <!-- Leaflet Locate plugin -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.css" />
+    <script src="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.js"></script>
 
-<!-- Chart.js pour historique -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        html, body { margin: 0; height: 100%; }
+        #map { width: 100%; height: 100%; }
 
-<!-- Supabase -->
-<script type="module">
-  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+        /* Overlay log en bas à gauche */
+        .leaflet-control-log {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 6px 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.3);
+            pointer-events: none;
+            margin: 10px;
+            z-index: 1000;
+        }
 
-  // 🔑 Remplace par ton URL et ta clé publique Supabase
-  const supabaseUrl = 'https://YOUR_SUPABASE_URL.supabase.co';
-  const supabaseKey = 'YOUR_SUPABASE_PUBLIC_ANON_KEY';
-  const supabase = createClient(supabaseUrl, supabaseKey);
-  window.supabase = supabase;
-</script>
-
-<style>
-  html, body { margin: 0; height: 100%; }
-  #map { width: 100%; height: 100%; }
-
-  /* Overlay log en bas à gauche */
-  .leaflet-control-log {
-    background: rgba(255, 255, 255, 0.9);
-    padding: 6px 10px;
-    border-radius: 5px;
-    font-size: 14px;
-    box-shadow: 0 0 5px rgba(0,0,0,0.3);
-    pointer-events: none;
-    margin: 10px;
-    z-index: 1000;
-  }
-
-  /* Tooltip nombre de vélos centré */
-  .station-tooltip {
-    background: transparent ;
-    border: none !important;
-    box-shadow: none !important;
-    color: white;
-    font-size: 16px;
-    font-weight: bold;
-    text-align: center;
-    padding: 0;
-    pointer-events: none;
-  }
-</style>
+        /* Tooltip nombre de vélos centré */
+        .station-tooltip {
+            background: transparent;
+            border: none !important;
+            box-shadow: none !important;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+            padding: 0;
+            pointer-events: none;
+        }
+    </style>
 </head>
 <body>
-<div id="map"></div>
+    <div id="map"></div>
 
-<script type="module">
-const cors = "https://corsproxy.io/?";
-const url_info   = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/station_information.json");
-const url_status = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/station_status.json");
-const url_bikes  = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/free_bike_status.json");
+    <script>
+        // URLs API
+        const cors = "https://corsproxy.io/?";
+        const urlInfo = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/station_information.json");
+        const urlStatus = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/station_status.json");
+        const urlBikes = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/free_bike_status.json");
 
-// Carte
-const map = L.map("map").setView([43.3, 5.38], 13);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  attribution: "&copy; OpenStreetMap contributors"
-}).addTo(map);
+        // Carte
+        const map = L.map("map").setView([43.3, 5.38], 13);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "&copy; OpenStreetMap contributors"
+        }).addTo(map);
 
-// GPS utilisateur
-L.control.locate({
-  position: "topleft",
-  strings: { title: "Ma position" },
-  flyTo: true,
-  locateOptions: { enableHighAccuracy: true }
-}).addTo(map);
+        // GPS utilisateur
+        L.control.locate({
+            position: "topleft",
+            strings: { title: "Ma position" },
+            flyTo: true,
+            locateOptions: { enableHighAccuracy: true }
+        }).addTo(map);
 
-let userMarker;
-if (navigator.geolocation) {
-  navigator.geolocation.watchPosition(
-    (pos) => {
-      const lat = pos.coords.latitude;
-      const lon = pos.coords.longitude;
-      if (userMarker) userMarker.setLatLng([lat, lon]);
-      else {
-        userMarker = L.marker([lat, lon], {
-          icon: L.icon({
-            iconUrl: 'https://cdn-icons-png.flaticon.com/512/64/64113.png',
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-          })
-        }).addTo(map).bindPopup("<b>Ma position</b>").openPopup();
-      }
-      if (!map._centeredOnUser) {
-        map.setView([lat, lon], 14);
-        map._centeredOnUser = true;
-      }
-    },
-    (err) => console.warn("Erreur GPS :", err),
-    { enableHighAccuracy: true, maximumAge: 1000 }
-  );
-}
-
-// Overlay log
-const LogControl = L.Control.extend({
-  onAdd: function(map) {
-    const div = L.DomUtil.create('div', 'leaflet-control-log');
-    div.innerHTML = "Chargement...";
-    L.DomEvent.disableClickPropagation(div);
-    return div;
-  }
-});
-const logControl = new LogControl({ position: 'bottomleft' }).addTo(map);
-
-// --- Fonction Supabase insertion ---
-async function insertSnapshot(bike) {
-  try {
-    const { error } = await window.supabase
-      .from('bike_data')
-      .insert([
-        {
-          bike_id: bike.bike_id,
-          timestamp: new Date().toISOString(),
-          station_id: bike.station_id,
-          battery: bike.battery,
-          range_meters: bike.current_range_meters
+        let userMarker;
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(
+                (pos) => {
+                    const lat = pos.coords.latitude;
+                    const lon = pos.coords.longitude;
+                    if (userMarker) userMarker.setLatLng([lat, lon]);
+                    else {
+                        userMarker = L.marker([lat, lon], {
+                            icon: L.icon({
+                                iconUrl: 'https://cdn-icons-png.flaticon.com/512/64/64113.png',
+                                iconSize: [30, 30],
+                                iconAnchor: [15, 15]
+                            })
+                        }).addTo(map).bindPopup("<b>Ma position</b>").openPopup();
+                    }
+                    if (!map._centeredOnUser) {
+                        map.setView([lat, lon], 14);
+                        map._centeredOnUser = true;
+                    }
+                },
+                (err) => console.warn("Erreur GPS :", err),
+                { enableHighAccuracy: true, maximumAge: 1000 }
+            );
         }
-      ]);
-    if (error) console.error('Erreur insertion Supabase:', error);
-  } catch (err) {
-    console.error('Erreur insertion Supabase:', err);
-  }
-}
 
-// --- Affichage historique vélo ---
-async function showBikeHistory(bike_id) {
-  const { data, error } = await window.supabase
-    .from('bike_data')
-    .select('timestamp,battery,range_meters,station_id')
-    .eq('bike_id', bike_id)
-    .gte('timestamp', new Date(Date.now() - 24*60*60*1000).toISOString())
-    .order('timestamp', { ascending: true });
-
-  if (error) return console.error(error);
-
-  // Créer un canvas Chart.js dans un popup ou modal
-  let historyWindow = window.open('', '_blank', 'width=600,height=400');
-  historyWindow.document.write('<canvas id="bikeHistory" width="580" height="380"></canvas>');
-
-  const ctx = historyWindow.document.getElementById('bikeHistory').getContext('2d');
-  new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: data.map(d => new Date(d.timestamp).toLocaleTimeString()),
-      datasets: [{
-        label: 'Batterie (%)',
-        data: data.map(d => d.battery),
-        borderColor: 'blue',
-        fill: false
-      },{
-        label: 'Autonomie (m)',
-        data: data.map(d => d.range_meters),
-        borderColor: 'green',
-        fill: false
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { position: 'top' } }
-    }
-  });
-}
-
-// Charger données
-async function loadData() {
-  const logOverlay = document.querySelector('.leaflet-control-log');
-  if (logOverlay) logOverlay.innerHTML = "⏳ Mise à jour en cours...";
-
-  try {
-    const [infoRes, statusRes, bikesRes] = await Promise.all([
-      fetch(url_info).then(r => r.json()),
-      fetch(url_status).then(r => r.json()),
-      fetch(url_bikes).then(r => r.json())
-    ]);
-
-    const info = infoRes.data.stations;
-    const status = statusRes.data.stations;
-    const bikes = bikesRes.data.bikes;
-
-    const stations = {};
-    info.forEach(s => stations[s.station_id] = { name: s.name, lat: s.lat, lon: s.lon, bikes: 0, docks: 0 });
-    status.forEach(s => {
-      if (stations[s.station_id]) {
-        stations[s.station_id].bikes = s.num_bikes_available;
-        stations[s.station_id].docks = s.num_docks_available;
-      }
-    });
-
-    const bikesByStation = {};
-    bikes.forEach(b => {
-      if (b.station_id) {
-        const dispo = b.is_disabled ? "❌ Cassé" : "";
-        const percent = Math.round((b.current_range_meters / 45000) * 100);
-        const text = Vélo 🔋 ${percent}% ${dispo};
-        if (!bikesByStation[b.station_id]) bikesByStation[b.station_id] = [];
-        bikesByStation[b.station_id].push(text);
-
-        // --- Envoi à Supabase ---
-        insertSnapshot({
-          bike_id: b.bike_id,
-          station_id: b.station_id,
-          battery: percent,
-          current_range_meters: b.current_range_meters
+        // Overlay log
+        const LogControl = L.Control.extend({
+            onAdd: function(map) {
+                const div = L.DomUtil.create('div', 'leaflet-control-log');
+                div.innerHTML = "Chargement...";
+                L.DomEvent.disableClickPropagation(div);
+                return div;
+            }
         });
-      }
-    });
+        const logControl = new LogControl({ position: 'bottomleft' }).addTo(map);
 
-    if (window.stationLayer) map.removeLayer(window.stationLayer);
-    window.stationLayer = L.layerGroup().addTo(map);
+        // Charger données
+        async function loadData() {
+            const logOverlay = document.querySelector('.leaflet-control-log');
+            if (logOverlay) logOverlay.innerHTML = "⏳ Mise à jour en cours...";
 
-    Object.entries(stations).forEach(([id, st]) => {
-      const nbVelo = st.bikes;
-      let popup = <b>${st.name}</b><br>🚲 ${nbVelo} vélos<br>🅿️ ${st.docks} places;
-      if (bikesByStation[id] && bikesByStation[id].length > 0) {
-        popup += "<br><br><b>Vélos disponibles :</b><br>" + bikesByStation[id].join("<br>");
-      }
+            try {
+                const [infoRes, statusRes, bikesRes] = await Promise.all([
+                    fetch(urlInfo).then(r => r.json()),
+                    fetch(urlStatus).then(r => r.json()),
+                    fetch(urlBikes).then(r => r.json())
+                ]);
 
-      popup += <br><button onclick="showBikeHistory('${id}')">Voir historique 24h</button>;
+                const stationsInfo = infoRes.data.stations;
+                const stationsStatus = statusRes.data.stations;
+                const freeBikes = bikesRes.data.bikes;
 
-      const circle = L.circleMarker([st.lat, st.lon], {
-        radius: 15,
-        color: '#E94E1B',
-        fillColor: '#E94E1B',
-        fillOpacity: 0.8,
-        weight: 0
-      }).addTo(window.stationLayer);
+                const stations = {};
+                stationsInfo.forEach(s => stations[s.station_id] = {
+                    name: s.name,
+                    lat: s.lat,
+                    lon: s.lon,
+                    bikes: 0,
+                    docks: 0
+                });
 
-      circle.bindPopup(popup);
-      circle.bindTooltip(${nbVelo}, {
-        permanent: true,
-        direction: 'center',
-        className: 'station-tooltip'
-      }).openTooltip();
-    });
+                stationsStatus.forEach(s => {
+                    if (stations[s.station_id]) {
+                        stations[s.station_id].bikes = s.num_bikes_available;
+                        stations[s.station_id].docks = s.num_docks_available;
+                    }
+                });
 
-    if (logOverlay) {
-      logOverlay.innerHTML = "✅ Dernière mise à jour : " + new Date().toLocaleTimeString();
-    }
+                // Vélos par station
+                const bikesByStation = {};
+                freeBikes.forEach(b => {
+                    if (b.station_id) {
+                        const dispo = b.is_disabled ? "❌ Cassé" : "";
+                        const percent = Math.round((b.current_range_meters / 45000) * 100);
+                        const text = `Vélo 🔋 ${percent}% ${dispo}`;
+                        if (!bikesByStation[b.station_id]) bikesByStation[b.station_id] = [];
+                        bikesByStation[b.station_id].push(text);
+                    }
+                });
 
-  } catch (err) {
-    if (logOverlay) logOverlay.innerHTML = "❌ Erreur : " + err;
-    console.error(err);
-  }
-}
+                if (window.stationLayer) map.removeLayer(window.stationLayer);
+                window.stationLayer = L.layerGroup().addTo(map);
 
-// Refresh toutes les 2 minutes
-function refresh() {
-  loadData();
-  setTimeout(refresh, 60000);
-}
-refresh();
+                // Ajouter cercles stations
+                Object.entries(stations).forEach(([id, st]) => {
+                    const nbVelo = st.bikes;
+                    let popup = `<b>${st.name}</b><br>🚲 ${nbVelo} vélos<br>🅿️ ${st.docks} places`;
+                    if (bikesByStation[id]?.length) {
+                        popup += "<br><br><b>Vélos disponibles :</b><br>" + bikesByStation[id].join("<br>");
+                    }
+                    const circle = L.circleMarker([st.lat, st.lon], {
+                        radius: 15,
+                        color: '#E94E1B',
+                        fillColor: '#E94E1B',
+                        fillOpacity: 0.8,
+                        weight: 0
+                    }).addTo(window.stationLayer);
 
-</script>
+                    circle.bindPopup(popup);
+                    circle.bindTooltip(`${nbVelo}`, {
+                        permanent: true,
+                        direction: 'center',
+                        className: 'station-tooltip'
+                    }).openTooltip();
+                });
+
+                if (logOverlay) {
+                    logOverlay.innerHTML = "✅ Dernière mise à jour : " + new Date().toLocaleTimeString();
+                }
+
+            } catch (err) {
+                if (logOverlay) logOverlay.innerHTML = "❌ Erreur : " + err;
+                console.error(err);
+            }
+        }
+
+        // Refresh toutes les 2 minutes
+        function refresh() {
+            loadData();
+            setTimeout(refresh, 120000);
+        }
+
+        refresh();
+    </script>
 </body>
 </html>
