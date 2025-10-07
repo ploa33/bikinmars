@@ -140,7 +140,7 @@
                 freeBikes.forEach(b => {
                     if (b.station_id) {
                         const dispo = b.is_disabled ? "❌ Cassé" : "";
-                        const percent = Math.round((b.current_range_meters / 45000) * 120);
+                        const percent = Math.round((b.current_range_meters / 45000) * 115);
                         const text = `Vélo 🔋 ${percent}% ${dispo}`;
                         if (!bikesByStation[b.station_id]) bikesByStation[b.station_id] = [];
                         bikesByStation[b.station_id].push(text);
