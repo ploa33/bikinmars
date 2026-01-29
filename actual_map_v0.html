@@ -3,41 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BikinMars - Carte en Temps Réel</title>
 
-    <!-- Leaflet -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-    <!-- Leaflet Locate plugin -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.css" />
     <script src="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.js"></script>
 
     <style>
-        html, body { margin: 0; height: 100%; }
+        html, body { margin: 0; height: 100%; font-family: sans-serif; }
         #map { width: 100%; height: 100%; }
 
-        /* Overlay log en bas à gauche */
         .leaflet-control-log {
             background: rgba(255, 255, 255, 0.9);
-            padding: 6px 10px;
-            border-radius: 5px;
-            font-size: 14px;
-            box-shadow: 0 0 5px rgba(0,0,0,0.3);
-            pointer-events: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
             margin: 10px;
             z-index: 1000;
         }
 
-        /* Tooltip nombre de vélos centré */
         .station-tooltip {
             background: transparent;
             border: none !important;
             box-shadow: none !important;
             color: white;
-            font-size: 16px;
+            font-size: 14px;
             font-weight: bold;
             text-align: center;
-            padding: 0;
             pointer-events: none;
         }
     </style>
@@ -46,67 +41,40 @@
     <div id="map"></div>
 
     <script>
-        // URLs API
-        const cors = "https://corsproxy.io/?";
-        const urlInfo = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/station_information.json");
-        const urlStatus = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/station_status.json");
-        const urlBikes = cors + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/free_bike_status.json");
+        // Configuration des URLs avec le nouveau proxy AllOrigins
+        const proxy = "https://api.allorigins.win/raw?url=";
+        const urlInfo = proxy + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/station_information.json");
+        const urlStatus = proxy + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/station_status.json");
+        const urlBikes = proxy + encodeURIComponent("https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en/free_bike_status.json");
 
-        // Carte
-        const map = L.map("map").setView([43.3, 5.38], 13);
+        // Initialisation de la carte
+        const map = L.map("map").setView([43.2965, 5.3764], 13);
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
             attribution: "&copy; OpenStreetMap contributors"
         }).addTo(map);
 
-        // GPS utilisateur
+        // Ajout du bouton de géolocalisation
         L.control.locate({
             position: "topleft",
-            strings: { title: "Ma position" },
-            flyTo: true,
-            locateOptions: { enableHighAccuracy: true }
+            strings: { title: "Me localiser" },
+            flyTo: true
         }).addTo(map);
 
-        let userMarker;
-        if (navigator.geolocation) {
-            navigator.geolocation.watchPosition(
-                (pos) => {
-                    const lat = pos.coords.latitude;
-                    const lon = pos.coords.longitude;
-                    if (userMarker) userMarker.setLatLng([lat, lon]);
-                    else {
-                        userMarker = L.marker([lat, lon], {
-                            icon: L.icon({
-                                iconUrl: 'https://cdn-icons-png.flaticon.com/512/64/64113.png',
-                                iconSize: [30, 30],
-                                iconAnchor: [15, 15]
-                            })
-                        }).addTo(map).bindPopup("<b>Ma position</b>").openPopup();
-                    }
-                    if (!map._centeredOnUser) {
-                        map.setView([lat, lon], 14);
-                        map._centeredOnUser = true;
-                    }
-                },
-                (err) => console.warn("Erreur GPS :", err),
-                { enableHighAccuracy: true, maximumAge: 1000 }
-            );
-        }
-
-        // Overlay log
+        // Overlay de statut (Log)
         const LogControl = L.Control.extend({
             onAdd: function(map) {
-                const div = L.DomUtil.create('div', 'leaflet-control-log');
-                div.innerHTML = "Chargement...";
-                L.DomEvent.disableClickPropagation(div);
-                return div;
+                this._div = L.DomUtil.create('div', 'leaflet-control-log');
+                this._div.innerHTML = "Initialisation...";
+                return this._div;
+            },
+            update: function(msg) {
+                this._div.innerHTML = msg;
             }
         });
-        const logControl = new LogControl({ position: 'bottomleft' }).addTo(map);
+        const log = new LogControl({ position: 'bottomleft' }).addTo(map);
 
-        // Charger données
         async function loadData() {
-            const logOverlay = document.querySelector('.leaflet-control-log');
-            if (logOverlay) logOverlay.innerHTML = "⏳ Mise à jour en cours...";
+            log.update("⏳ Mise à jour...");
 
             try {
                 const [infoRes, statusRes, bikesRes] = await Promise.all([
@@ -115,19 +83,29 @@
                     fetch(urlBikes).then(r => r.json())
                 ]);
 
+                // Vérification que les données sont valides
+                if (!infoRes.data || !statusRes.data) {
+                    throw new Error("Données GBFS introuvables");
+                }
+
                 const stationsInfo = infoRes.data.stations;
                 const stationsStatus = statusRes.data.stations;
-                const freeBikes = bikesRes.data.bikes;
+                const freeBikes = bikesRes.data.bikes || [];
 
                 const stations = {};
-                stationsInfo.forEach(s => stations[s.station_id] = {
-                    name: s.name,
-                    lat: s.lat,
-                    lon: s.lon,
-                    bikes: 0,
-                    docks: 0
+
+                // 1. Préparer les infos de base
+                stationsInfo.forEach(s => {
+                    stations[s.station_id] = {
+                        name: s.name,
+                        lat: s.lat,
+                        lon: s.lon,
+                        bikes: 0,
+                        docks: 0
+                    };
                 });
 
+                // 2. Ajouter les disponibilités en temps réel
                 stationsStatus.forEach(s => {
                     if (stations[s.station_id]) {
                         stations[s.station_id].bikes = s.num_bikes_available;
@@ -135,61 +113,57 @@
                     }
                 });
 
-                // Vélos par station
+                // 3. Mapper les vélos libres (batterie, etc.)
                 const bikesByStation = {};
                 freeBikes.forEach(b => {
                     if (b.station_id) {
-                        const dispo = b.is_disabled ? "❌ Cassé" : "";
-                        const percent = Math.round((b.current_range_meters / 45000) * 115);
-                        const text = `Vélo 🔋 ${percent}% ${dispo}`;
+                        const range = Math.round((b.current_range_meters / 45000) * 100);
+                        const detail = `🚲 Bat: ${range}% ${b.is_disabled ? '⚠️ Cassé' : ''}`;
                         if (!bikesByStation[b.station_id]) bikesByStation[b.station_id] = [];
-                        bikesByStation[b.station_id].push(text);
+                        bikesByStation[b.station_id].push(detail);
                     }
                 });
 
+                // Nettoyage de l'ancienne couche
                 if (window.stationLayer) map.removeLayer(window.stationLayer);
                 window.stationLayer = L.layerGroup().addTo(map);
 
-                // Ajouter cercles stations
+                // 4. Affichage des marqueurs
                 Object.entries(stations).forEach(([id, st]) => {
                     const nbVelo = st.bikes;
-                    let popup = `<b>${st.name}</b><br>🚲 ${nbVelo} vélos<br>🅿️ ${st.docks} places`;
-                    if (bikesByStation[id]?.length) {
-                        popup += "<br><br><b>Vélos disponibles :</b><br>" + bikesByStation[id].join("<br>");
+                    let popupContent = `<b>${st.name}</b><br>🚲 ${nbVelo} vélos<br>🅿️ ${st.docks} places`;
+                    
+                    if (bikesByStation[id]) {
+                        popupContent += `<hr><b>Détails :</b><br>${bikesByStation[id].slice(0, 5).join('<br>')}`;
                     }
-                    const circle = L.circleMarker([st.lat, st.lon], {
-                        radius: 15,
+
+                    const marker = L.circleMarker([st.lat, st.lon], {
+                        radius: 14,
                         color: '#E94E1B',
                         fillColor: '#E94E1B',
                         fillOpacity: 0.8,
                         weight: 0
                     }).addTo(window.stationLayer);
 
-                    circle.bindPopup(popup);
-                    circle.bindTooltip(`${nbVelo}`, {
+                    marker.bindPopup(popupContent);
+                    marker.bindTooltip(`${nbVelo}`, {
                         permanent: true,
                         direction: 'center',
                         className: 'station-tooltip'
-                    }).openTooltip();
+                    });
                 });
 
-                if (logOverlay) {
-                    logOverlay.innerHTML = "✅ Dernière mise à jour : " + new Date().toLocaleTimeString();
-                }
+                log.update("✅ Mis à jour à " + new Date().toLocaleTimeString());
 
             } catch (err) {
-                if (logOverlay) logOverlay.innerHTML = "❌ Erreur : " + err;
                 console.error(err);
+                log.update("❌ Erreur de connexion au flux");
             }
         }
 
-        // Refresh toutes les 2 minutes
-        function refresh() {
-            loadData();
-            setTimeout(refresh, 120000);
-        }
-
-        refresh();
+        // Chargement initial et rafraîchissement auto
+        loadData();
+        setInterval(loadData, 60000); // Toutes les minutes
     </script>
 </body>
 </html>
