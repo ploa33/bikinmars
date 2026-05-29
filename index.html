@@ -546,18 +546,71 @@ a { color: inherit; text-decoration: none; }
 }
 .popup-btn-secondary:hover { border-color: var(--border-hover); color: var(--text-primary); }
 
-/* ==================== STATION MARKER ==================== */
-.station-marker-wrapper {
+.station-marker-wrapper:hover { transform: scale(1.2); }
+
+/* ==================== POPUP BIKE LIST ==================== */
+.popup-bikes-list-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-top: 14px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.popup-bikes-scroll-container {
+  max-height: 115px;
+  overflow-y: auto;
+  margin-bottom: 14px;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  scrollbar-width: thin;
+}
+.popup-bikes-scroll-container::-webkit-scrollbar { width: 3px; }
+.popup-bikes-scroll-container::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 3px; }
+
+.popup-bike-item {
   display: flex;
   align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  font-family: 'Inter', sans-serif;
-  font-weight: 700;
-  transition: transform 0.2s ease;
-  cursor: pointer;
+  justify-content: space-between;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  transition: all var(--transition);
 }
-.station-marker-wrapper:hover { transform: scale(1.2); }
+.popup-bike-item:hover {
+  border-color: var(--border-hover);
+}
+.popup-bike-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.popup-bike-battery {
+  font-weight: 500;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.popup-bike-btn {
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--accent-glow);
+  color: var(--accent);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: all var(--transition);
+  text-align: center;
+}
+.popup-bike-btn:hover {
+  background: var(--accent);
+  color: white;
+}
 
 /* ==================== TOAST ==================== */
 .toast {
@@ -771,6 +824,7 @@ const state = {
   theme: 'light',           // 'light' or 'dark'
   stations: new Map(),      // station_id → merged station object
   freeBikes: [],            // available free-floating bikes
+  stationBikes: new Map(),  // station_id → array of docked bike objects
   vehicleTypes: new Map(),  // vehicle_type_id → type info
   userLat: null,
   userLon: null,
@@ -863,6 +917,17 @@ async function loadAllData() {
         isReturning: sts.is_returning !== false,
         vehicleTypesAvailable: sts.vehicle_types_available || [],
       });
+    });
+
+    // Stationed bikes grouping
+    state.stationBikes.clear();
+    (bikesData.data.bikes || []).forEach(b => {
+      if (!b.is_disabled && !b.is_reserved && b.station_id && b.station_id !== '') {
+        if (!state.stationBikes.has(b.station_id)) {
+          state.stationBikes.set(b.station_id, []);
+        }
+        state.stationBikes.get(b.station_id).push(b);
+      }
     });
 
     // Free-floating bikes (available only)
@@ -1048,6 +1113,41 @@ function createPopupContent(station) {
   const rentalUri = getRentalUri(station.rentalUris);
   const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lon}&travelmode=walking`;
 
+  // Get and sort individual bikes at this station by battery range
+  let bikesListHtml = '';
+  const stationBikesList = state.stationBikes.get(station.id) || [];
+  if (stationBikesList.length > 0) {
+    stationBikesList.sort((a, b) => {
+      const aRange = a.current_range_meters || 0;
+      const bRange = b.current_range_meters || 0;
+      return bRange - aRange;
+    });
+
+    bikesListHtml += '<div class="popup-bikes-list-title">⚡ Sélectionner un vélo :</div>';
+    bikesListHtml += '<div class="popup-bikes-scroll-container">';
+    stationBikesList.forEach((bike, index) => {
+      const vtInfo = getVehicleTypeInfo(bike.vehicle_type_id);
+      const rangeKm = Math.round((bike.current_range_meters || 0) / 1000);
+      const maxRange = vtInfo.maxRange || 40000;
+      const rangePct = Math.round(((bike.current_range_meters || 0) / maxRange) * 100);
+
+      const batIcon = rangePct > 80 ? '🔋' : rangePct > 35 ? '🪫' : '⚠️';
+      const bikeLabel = vtInfo.isElectric ? `Élec #${index + 1}` : `Méca #${index + 1}`;
+      const batteryText = vtInfo.isElectric ? `${batIcon} ${rangePct}% (${rangeKm} km)` : '🚲 Mécanique';
+
+      const bikeUri = getRentalUri(bike.rental_uris);
+
+      bikesListHtml += `
+        <div class="popup-bike-item">
+          <span class="popup-bike-name">${bikeLabel}</span>
+          <span class="popup-bike-battery">${batteryText}</span>
+          ${bikeUri ? `<a href="${bikeUri}" class="popup-bike-btn" target="_blank" rel="noopener">Louer</a>` : ''}
+        </div>
+      `;
+    });
+    bikesListHtml += '</div>';
+  }
+
   return `
     <div class="popup-content">
       <h3 class="popup-title">${station.name}</h3>
@@ -1070,6 +1170,7 @@ function createPopupContent(station) {
         </div>
       </div>
       ${typesHtml}
+      ${bikesListHtml}
       <div class="popup-actions">
         ${rentalUri ? `<a href="${rentalUri}" class="popup-btn popup-btn-primary" target="_blank" rel="noopener">📱 Levélo</a>` : ''}
         <a href="${directionsUrl}" class="popup-btn popup-btn-secondary" target="_blank" rel="noopener">🧭 Y aller</a>
