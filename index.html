@@ -1062,11 +1062,13 @@ function renderFreeBikes() {
   // Only show free bikes at higher zoom levels to avoid clutter
   if (map.getZoom() < 15) return;
 
+  // 1. Draw Free-floating bikes (available only)
   state.freeBikes.forEach(bike => {
     if (!bike.lat || !bike.lon) return;
 
     const vtInfo = getVehicleTypeInfo(bike.vehicle_type_id);
-    const rangePct = vtInfo.maxRange > 0 ? Math.round((bike.current_range_meters / vtInfo.maxRange) * 100) : null;
+    const maxRange = vtInfo.maxRange || 40000;
+    const rangePct = Math.round((bike.current_range_meters / maxRange) * 100);
 
     const circle = L.circleMarker([bike.lat, bike.lon], {
       radius: 5,
@@ -1076,12 +1078,76 @@ function renderFreeBikes() {
       weight: 1.5,
     });
 
-    let tip = vtInfo.isElectric ? `⚡ Vélo électrique` : `🚲 Vélo mécanique`;
-    if (rangePct !== null) tip += ` · 🔋 ${rangePct}%`;
+    let tip = vtInfo.isElectric ? `⚡ Vélo électrique (Free-floating)` : `🚲 Vélo mécanique (Free-floating)`;
+    if (vtInfo.isElectric) tip += ` · 🔋 ${rangePct}% (${Math.round(bike.current_range_meters / 1000)} km)`;
+    
+    const bikeUri = getRentalUri(bike.rental_uris);
+    if (bikeUri) {
+      circle.on('click', () => {
+        window.open(bikeUri, '_blank', 'noopener');
+      });
+      tip += `<br/><span style="font-size:10px;color:var(--accent);font-weight:bold;">👉 Clic pour louer ce vélo</span>`;
+    }
+    
     circle.bindTooltip(tip, { direction: 'top', className: '' });
-
     circle.addTo(bikeLayer);
   });
+
+  // 2. Draw Docked bikes at their high-precision GPS coordinates when zoomed in very close (zoom >= 17)
+  if (map.getZoom() >= 17) {
+    state.stationBikes.forEach((bikesList, stationId) => {
+      // Sort docked bikes at this station by range to give consistent index labelling
+      const sortedBikes = [...bikesList].sort((a, b) => {
+        const aRange = a.current_range_meters || 0;
+        const bRange = b.current_range_meters || 0;
+        return bRange - aRange;
+      });
+
+      sortedBikes.forEach((bike, index) => {
+        if (!bike.lat || !bike.lon) return;
+
+        const vtInfo = getVehicleTypeInfo(bike.vehicle_type_id);
+        const rangeKm = Math.round((bike.current_range_meters || 0) / 1000);
+        const maxRange = vtInfo.maxRange || 40000;
+        const rangePct = Math.round(((bike.current_range_meters || 0) / maxRange) * 100);
+
+        // Color-code based on battery charge level
+        let color = 'var(--success)';
+        if (!vtInfo.isElectric) color = 'var(--success)'; // Green for mechanics
+        else if (rangePct === 0) color = 'var(--danger)'; // Red for empty
+        else if (rangePct < 35) color = 'var(--warning)'; // Orange for low
+
+        // White border to denote "docked in a station dock"
+        const circle = L.circleMarker([bike.lat, bike.lon], {
+          radius: 6,
+          color: '#FFFFFF', 
+          fillColor: color,
+          fillOpacity: 0.95,
+          weight: 2,
+          boxShadow: '0 2px 5px rgba(0,0,0,0.3)',
+        });
+
+        const bikeLabel = vtInfo.isElectric ? `Élec #${index + 1}` : `Méca #${index + 1}`;
+        let tip = `<b>${bikeLabel} (En station)</b><br/>`;
+        if (vtInfo.isElectric) {
+          tip += `⚡ Électrique · 🔋 ${rangePct}% (${rangeKm} km)`;
+        } else {
+          tip += `🚲 Mécanique`;
+        }
+
+        const bikeUri = getRentalUri(bike.rental_uris);
+        if (bikeUri) {
+          circle.on('click', () => {
+            window.open(bikeUri, '_blank', 'noopener');
+          });
+          tip += `<br/><span style="font-size:10px;color:var(--accent);font-weight:bold;">👉 Clic pour louer ce vélo</span>`;
+        }
+
+        circle.bindTooltip(tip, { direction: 'top', className: '' });
+        circle.addTo(bikeLayer);
+      });
+    });
+  }
 }
 
 // ================================================================
