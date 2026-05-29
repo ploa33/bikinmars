@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BikinMars — Vélos en temps réel à Marseille</title>
+  <meta name="description" content="Carte en temps réel des stations Levélo à Marseille. Trouvez un vélo disponible près de vous, consultez les disponibilités et naviguez vers la station la plus proche.">
+  <meta name="theme-color" content="#0F172A">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚲</text></svg>">
+
+  <!-- Google Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Leaflet Locate -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol@0.81.1/dist/L.Control.Locate.min.css" />
+  <script src="https://unpkg.com/leaflet.locatecontrol@0.81.1/dist/L.Control.Locate.min.js"></script>
+
+<style>
+/* ==================== VARIABLES ==================== */
+:root {
+  --bg-primary: #0F172A;
+  --bg-secondary: #1E293B;
+  --bg-glass: rgba(15, 23, 42, 0.85);
+  --bg-glass-hover: rgba(30, 41, 59, 0.9);
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --accent: #FF6B35;
+  --accent-hover: #FF8555;
+  --accent-glow: rgba(255, 107, 53, 0.25);
+  --success: #2DD4BF;
+  --success-bg: rgba(45, 212, 191, 0.15);
+  --warning: #FBBF24;
+  --warning-bg: rgba(251, 191, 36, 0.15);
+  --danger: #EF4444;
+  --danger-bg: rgba(239, 68, 68, 0.15);
+  --muted: #6B7280;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.15);
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --radius: 14px;
+  --radius-sm: 10px;
+  --sidebar-width: 380px;
+  --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ==================== RESET ==================== */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow: hidden; font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg-primary); color: var(--text-primary); }
+button { cursor: pointer; border: none; background: none; font-family: inherit; color: inherit; }
+input { font-family: inherit; }
+a { color: inherit; text-decoration: none; }
+
+/* ==================== MAP ==================== */
+#map {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: var(--sidebar-width);
+  z-index: 1;
+  transition: left var(--transition);
+}
+
+/* ==================== LOADING ==================== */
+#loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+#loading-overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+.loading-icon { font-size: 56px; animation: pulse-bounce 1.5s infinite ease-in-out; }
+.loading-text { margin-top: 20px; font-size: 16px; font-weight: 500; color: var(--text-secondary); letter-spacing: 0.5px; }
+.loading-bar { width: 200px; height: 3px; background: var(--bg-secondary); border-radius: 3px; margin-top: 16px; overflow: hidden; }
+.loading-bar-fill { height: 100%; width: 40%; background: linear-gradient(90deg, var(--accent), var(--accent-hover)); border-radius: 3px; animation: loading-slide 1.2s infinite ease-in-out; }
+
+/* ==================== SIDEBAR ==================== */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-width);
+  background: var(--bg-glass);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-right: 1px solid var(--border);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  transition: transform var(--transition);
+  overflow: hidden;
+}
+
+.sidebar-header {
+  padding: 20px 20px 0;
+  flex-shrink: 0;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.brand-icon {
+  font-size: 36px;
+  animation: gentle-bounce 3s infinite ease-in-out;
+}
+.brand-title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, var(--accent), #FF9F6B);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.brand-subtitle {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-top: 2px;
+  letter-spacing: 0.3px;
+}
+.sidebar-close {
+  display: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  font-size: 18px;
+  color: var(--text-secondary);
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+  flex-shrink: 0;
+}
+.sidebar-close:hover { background: var(--bg-glass-hover); color: var(--text-primary); }
+
+/* ==================== STATS ==================== */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 18px 20px;
+  flex-shrink: 0;
+}
+.stat-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 8px;
+  text-align: center;
+  transition: border-color var(--transition);
+}
+.stat-card:hover { border-color: var(--border-hover); }
+.stat-value {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+.stat-value.accent { color: var(--accent); }
+.stat-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+/* ==================== SEARCH ==================== */
+.search-wrapper {
+  padding: 0 20px;
+  flex-shrink: 0;
+}
+.search-input {
+  width: 100%;
+  padding: 12px 16px 12px 42px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  transition: all var(--transition);
+}
+.search-input::placeholder { color: var(--text-muted); }
+.search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.search-icon {
+  position: absolute;
+  left: 34px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 16px;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* ==================== FILTERS ==================== */
+.filter-bar {
+  display: flex;
+  gap: 8px;
+  padding: 14px 20px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.filter-bar::-webkit-scrollbar { display: none; }
+.filter-pill {
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  transition: all var(--transition);
+}
+.filter-pill:hover { border-color: var(--border-hover); color: var(--text-primary); }
+.filter-pill.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ==================== STATION LIST ==================== */
+.station-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 12px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-muted) transparent;
+}
+.station-list::-webkit-scrollbar { width: 4px; }
+.station-list::-webkit-scrollbar-track { background: transparent; }
+.station-list::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 4px; }
+
+.station-card {
+  padding: 14px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+  border: 1px solid transparent;
+  margin-bottom: 4px;
+}
+.station-card:hover { background: var(--bg-secondary); border-color: var(--border); }
+.station-card.highlighted { background: var(--accent-glow); border-color: var(--accent); }
+
+.station-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.station-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+.station-card-distance {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.station-card-bar {
+  height: 4px;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  margin: 8px 0;
+  overflow: hidden;
+}
+.station-card-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s ease;
+}
+.station-card-meta {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.station-card-meta span { display: flex; align-items: center; gap: 4px; }
+.station-card-badges {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.badge {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+.badge-electric { background: var(--warning-bg); color: var(--warning); }
+.badge-charging { background: var(--success-bg); color: var(--success); }
+
+.station-list-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* ==================== SIDEBAR FOOTER ==================== */
+.sidebar-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  position: relative;
+}
+.sidebar-footer-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.countdown-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+  border-radius: 2px;
+  transition: width 1s linear;
+}
+
+/* ==================== MOBILE TOGGLE ==================== */
+.sidebar-toggle {
+  display: none;
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1500;
+  padding: 14px 28px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 50px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  box-shadow: var(--shadow);
+  transition: all var(--transition);
+  gap: 8px;
+  align-items: center;
+}
+.sidebar-toggle:hover { border-color: var(--accent); box-shadow: 0 0 20px var(--accent-glow); }
+.sidebar-toggle .toggle-count { color: var(--accent); font-weight: 700; }
+
+/* ==================== LEAFLET OVERRIDES ==================== */
+.leaflet-control-zoom a,
+.leaflet-bar a {
+  background: var(--bg-glass) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border) !important;
+  transition: all var(--transition) !important;
+}
+.leaflet-control-zoom a:hover,
+.leaflet-bar a:hover {
+  background: var(--bg-glass-hover) !important;
+  border-color: var(--border-hover) !important;
+}
+.leaflet-control-attribution {
+  background: rgba(15, 23, 42, 0.7) !important;
+  color: var(--text-muted) !important;
+  font-size: 10px !important;
+}
+.leaflet-control-attribution a { color: var(--text-secondary) !important; }
+.leaflet-control-locate .leaflet-bar-part-single { background: var(--bg-glass) !important; }
+.leaflet-control-locate.active .leaflet-bar-part-single { background: var(--accent-glow) !important; border-color: var(--accent) !important; }
+
+/* ==================== POPUP ==================== */
+.leaflet-popup-content-wrapper {
+  background: var(--bg-glass) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5) !important;
+  padding: 0 !important;
+}
+.leaflet-popup-content { margin: 0 !important; width: 280px !important; }
+.leaflet-popup-tip { background: var(--bg-glass) !important; border: none !important; }
+.leaflet-popup-close-button {
+  color: var(--text-muted) !important;
+  font-size: 22px !important;
+  top: 8px !important;
+  right: 12px !important;
+  transition: color var(--transition) !important;
+}
+.leaflet-popup-close-button:hover { color: var(--text-primary) !important; }
+
+.popup-content { padding: 20px; }
+.popup-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; padding-right: 24px; }
+.popup-status { font-size: 11px; color: var(--text-muted); margin-bottom: 14px; }
+.popup-bar-wrapper {
+  height: 6px;
+  background: var(--bg-primary);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.popup-bar { height: 100%; border-radius: 6px; transition: width 0.6s ease; }
+.popup-stats {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 14px;
+}
+.popup-stat { text-align: center; }
+.popup-stat-value { font-size: 24px; font-weight: 800; display: block; }
+.popup-stat-label { font-size: 11px; color: var(--text-muted); font-weight: 500; }
+.popup-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.popup-type-badge {
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+.popup-actions {
+  display: flex;
+  gap: 8px;
+}
+.popup-btn {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all var(--transition);
+}
+.popup-btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  color: white;
+}
+.popup-btn-primary:hover { box-shadow: 0 4px 16px var(--accent-glow); transform: translateY(-1px); }
+.popup-btn-secondary {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+.popup-btn-secondary:hover { border-color: var(--border-hover); color: var(--text-primary); }
+
+/* ==================== STATION MARKER ==================== */
+.station-marker-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  transition: transform 0.2s ease;
+  cursor: pointer;
+}
+.station-marker-wrapper:hover { transform: scale(1.2); }
+
+/* ==================== TOAST ==================== */
+.toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  z-index: 9000;
+  padding: 12px 24px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: 50px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+/* ==================== ERROR BANNER ==================== */
+.error-banner {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8000;
+  padding: 12px 24px;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--danger);
+  display: none;
+  align-items: center;
+  gap: 10px;
+}
+.error-banner.show { display: flex; }
+.error-banner button {
+  padding: 4px 12px;
+  background: var(--danger);
+  color: white;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ==================== ANIMATIONS ==================== */
+@keyframes pulse-bounce {
+  0%, 100% { transform: scale(1) translateY(0); }
+  50% { transform: scale(1.1) translateY(-4px); }
+}
+@keyframes gentle-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes loading-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 var(--pulse-color); }
+  70% { box-shadow: 0 0 0 8px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 768px) {
+  #map { left: 0; }
+  .sidebar {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 85vh;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    border-radius: 20px 20px 0 0;
+    transform: translateY(100%);
+  }
+  .sidebar.open { transform: translateY(0); }
+  .sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .sidebar-close { display: flex; }
+  .sidebar-toggle { display: flex; }
+  .toast { bottom: 100px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== LOADING ==================== -->
+<div id="loading-overlay">
+  <div class="loading-icon">🚲</div>
+  <div class="loading-text">Chargement des stations...</div>
+  <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+</div>
+
+<!-- ==================== MAP ==================== -->
+<div id="map"></div>
+
+<!-- ==================== SIDEBAR ==================== -->
+<aside class="sidebar" id="sidebar">
+  <header class="sidebar-header">
+    <div class="brand">
+      <span class="brand-icon">🚲</span>
+      <div>
+        <h1 class="brand-title">BikinMars</h1>
+        <p class="brand-subtitle">Vélos en temps réel · Marseille</p>
+      </div>
+    </div>
+    <button class="sidebar-close" id="sidebar-close" aria-label="Fermer le panneau">✕</button>
+  </header>
+
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card">
+      <span class="stat-value accent" id="stat-bikes">—</span>
+      <span class="stat-label">Vélos</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-value" id="stat-docks">—</span>
+      <span class="stat-label">Places</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-value" id="stat-stations">—</span>
+      <span class="stat-label">Stations</span>
+    </div>
+  </div>
+
+  <div class="search-wrapper" style="position:relative;">
+    <span class="search-icon">🔍</span>
+    <input type="search" class="search-input" id="search-input" placeholder="Rechercher une station..." autocomplete="off" />
+  </div>
+
+  <div class="filter-bar" id="filter-bar">
+    <button class="filter-pill" data-filter="hasBikes">🚲 Vélos dispo</button>
+    <button class="filter-pill" data-filter="hasDocks">🅿️ Places dispo</button>
+    <button class="filter-pill" data-filter="isCharging">⚡ Recharge</button>
+  </div>
+
+  <div class="station-list" id="station-list"></div>
+
+  <footer class="sidebar-footer">
+    <div class="sidebar-footer-text">
+      <span id="last-update">Dernière MAJ : —</span>
+      <span id="countdown-text"></span>
+    </div>
+    <div class="countdown-bar" id="countdown-bar" style="width:100%"></div>
+  </footer>
+</aside>
+
+<!-- ==================== MOBILE TOGGLE ==================== -->
+<button class="sidebar-toggle" id="sidebar-toggle">
+  <span>🚲</span>
+  <span><span class="toggle-count" id="toggle-count">—</span> vélos disponibles</span>
+</button>
+
+<!-- ==================== TOAST ==================== -->
+<div class="toast" id="toast"></div>
+
+<!-- ==================== ERROR ==================== -->
+<div class="error-banner" id="error-banner">
+  <span>❌ Connexion au flux impossible</span>
+  <button onclick="loadAllData()">Réessayer</button>
+</div>
+
+<script>
+// ================================================================
+// CONFIG
+// ================================================================
+const GBFS_BASE = 'https://gbfs.omega.fifteen.eu/gbfs/2.2/marseille/en';
+const ENDPOINTS = {
+  info: `${GBFS_BASE}/station_information.json`,
+  status: `${GBFS_BASE}/station_status.json`,
+  bikes: `${GBFS_BASE}/free_bike_status.json`,
+  types: `${GBFS_BASE}/vehicle_types.json`,
+};
+const REFRESH_MS = 60_000;
+const MARSEILLE_CENTER = [43.2965, 5.3764];
+
+const CORS_PROXIES = [
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+];
+
+// ================================================================
+// STATE
+// ================================================================
+const state = {
+  stations: new Map(),      // station_id → merged station object
+  freeBikes: [],            // available free-floating bikes
+  vehicleTypes: new Map(),  // vehicle_type_id → type info
+  userLat: null,
+  userLon: null,
+  searchQuery: '',
+  filters: { hasBikes: false, hasDocks: false, isCharging: false },
+  lastUpdated: null,
+  refreshTimer: null,
+  countdownTimer: null,
+  countdownSec: 60,
+};
+
+// ================================================================
+// DATA FETCHING
+// ================================================================
+let lastWorkingMethod = 0; // 0=direct, 1+=proxy index
+
+async function fetchGBFS(url) {
+  // Build ordered list: direct fetch first, then proxies
+  const methods = [
+    () => fetch(url, { signal: AbortSignal.timeout(8000) }),
+    ...CORS_PROXIES.map(p => () => fetch(p(url), { signal: AbortSignal.timeout(12000) })),
+  ];
+
+  // Try the last working method first
+  if (lastWorkingMethod > 0) {
+    const pref = methods.splice(lastWorkingMethod, 1)[0];
+    methods.unshift(pref);
+  }
+
+  for (let i = 0; i < methods.length; i++) {
+    try {
+      const res = await methods[i]();
+      if (!res.ok) continue;
+      const data = await res.json();
+      lastWorkingMethod = i;
+      return data;
+    } catch (e) {
+      console.warn(`Method ${i} failed for ${url}:`, e.message);
+    }
+  }
+  throw new Error(`All methods failed for ${url}`);
+}
+
+async function loadAllData() {
+  hideError();
+  try {
+    const [infoData, statusData, bikesData, typesData] = await Promise.all([
+      fetchGBFS(ENDPOINTS.info),
+      fetchGBFS(ENDPOINTS.status),
+      fetchGBFS(ENDPOINTS.bikes),
+      fetchGBFS(ENDPOINTS.types).catch(() => null), // non-critical
+    ]);
+
+    // Vehicle types
+    state.vehicleTypes.clear();
+    if (typesData?.data?.vehicle_types) {
+      typesData.data.vehicle_types.forEach(vt => {
+        state.vehicleTypes.set(vt.vehicle_type_id, vt);
+      });
+    }
+
+    // Stations: merge info + status
+    const statusMap = new Map();
+    (statusData.data.stations || []).forEach(s => statusMap.set(s.station_id, s));
+
+    state.stations.clear();
+    (infoData.data.stations || []).forEach(info => {
+      const sts = statusMap.get(info.station_id) || {};
+      state.stations.set(info.station_id, {
+        id: info.station_id,
+        name: info.name,
+        lat: info.lat,
+        lon: info.lon,
+        capacity: info.capacity || 0,
+        isCharging: info.is_charging_station || false,
+        isVirtual: info.is_virtual_station || false,
+        rentalUris: info.rental_uris || null,
+        bikes: sts.num_bikes_available || 0,
+        docks: sts.num_docks_available || 0,
+        isInstalled: sts.is_installed !== false,
+        isRenting: sts.is_renting !== false,
+        isReturning: sts.is_returning !== false,
+        vehicleTypesAvailable: sts.vehicle_types_available || [],
+      });
+    });
+
+    // Free-floating bikes (available only)
+    state.freeBikes = (bikesData.data.bikes || []).filter(b =>
+      !b.is_disabled && !b.is_reserved && (!b.station_id || b.station_id === '')
+    );
+
+    state.lastUpdated = new Date();
+    return true;
+  } catch (err) {
+    console.error('Data loading failed:', err);
+    showError();
+    return false;
+  }
+}
+
+// ================================================================
+// MAP SETUP
+// ================================================================
+let map, stationLayer, bikeLayer;
+
+function initMap() {
+  map = L.map('map', {
+    zoomControl: false,
+    attributionControl: true,
+  }).setView(MARSEILLE_CENTER, 13);
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; <a href="https://carto.com/">CARTO</a> · <a href="https://osm.org/">OSM</a> · BikinMars',
+    maxZoom: 19,
+    subdomains: 'abcd',
+  }).addTo(map);
+
+  L.control.zoom({ position: 'topright' }).addTo(map);
+
+  L.control.locate({
+    position: 'topright',
+    strings: { title: 'Me localiser' },
+    flyTo: true,
+    keepCurrentZoomLevel: true,
+    onLocationFound: (e) => {
+      state.userLat = e.latitude;
+      state.userLon = e.longitude;
+      renderStationList();
+    },
+  }).addTo(map);
+
+  stationLayer = L.layerGroup().addTo(map);
+  bikeLayer = L.layerGroup().addTo(map);
+}
+
+// ================================================================
+// MARKERS
+// ================================================================
+function getStationColor(bikes, capacity, isOpen) {
+  if (!isOpen) return { main: '#6B7280', bg: 'rgba(107,114,128,0.2)' };
+  if (bikes === 0) return { main: '#EF4444', bg: 'rgba(239,68,68,0.2)' };
+  const pct = capacity > 0 ? bikes / capacity : 0;
+  if (pct < 0.3) return { main: '#FBBF24', bg: 'rgba(251,191,36,0.2)' };
+  return { main: '#2DD4BF', bg: 'rgba(45,212,191,0.2)' };
+}
+
+function createStationIcon(station) {
+  const isOpen = station.isInstalled && station.isRenting;
+  const { main, bg } = getStationColor(station.bikes, station.capacity, isOpen);
+  const baseSize = 30;
+  const sizeBoost = Math.min(18, Math.floor((station.capacity || 20) / 10) * 4);
+  const size = baseSize + sizeBoost;
+  const fontSize = size > 40 ? 14 : 12;
+
+  const pulseClass = (station.bikes === 0 && isOpen) ? `animation: pulse-ring 2s infinite; --pulse-color: ${bg};` : '';
+
+  return L.divIcon({
+    className: '',
+    html: `<div class="station-marker-wrapper" style="
+      width:${size}px; height:${size}px;
+      background:${bg};
+      border: 2.5px solid ${main};
+      color: ${main};
+      font-size: ${fontSize}px;
+      box-shadow: 0 0 14px ${bg}, 0 2px 8px rgba(0,0,0,0.3);
+      ${pulseClass}
+    ">${station.bikes}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -size / 2 - 4],
+  });
+}
+
+function renderStations() {
+  stationLayer.clearLayers();
+
+  state.stations.forEach(station => {
+    if (station.isVirtual && station.capacity === 0) return; // skip empty virtual stations
+
+    const marker = L.marker([station.lat, station.lon], {
+      icon: createStationIcon(station),
+      stationId: station.id,
+    });
+
+    marker.bindPopup(() => createPopupContent(station), {
+      maxWidth: 300,
+      minWidth: 280,
+      closeButton: true,
+      className: '',
+    });
+
+    marker.on('click', () => {
+      highlightStationCard(station.id);
+    });
+
+    marker.addTo(stationLayer);
+  });
+}
+
+function renderFreeBikes() {
+  bikeLayer.clearLayers();
+
+  // Only show free bikes at higher zoom levels to avoid clutter
+  if (map.getZoom() < 15) return;
+
+  state.freeBikes.forEach(bike => {
+    if (!bike.lat || !bike.lon) return;
+
+    const vtInfo = getVehicleTypeInfo(bike.vehicle_type_id);
+    const rangePct = vtInfo.maxRange > 0 ? Math.round((bike.current_range_meters / vtInfo.maxRange) * 100) : null;
+
+    const circle = L.circleMarker([bike.lat, bike.lon], {
+      radius: 5,
+      color: vtInfo.isElectric ? '#FBBF24' : '#2DD4BF',
+      fillColor: vtInfo.isElectric ? '#FBBF24' : '#2DD4BF',
+      fillOpacity: 0.7,
+      weight: 1.5,
+    });
+
+    let tip = vtInfo.isElectric ? `⚡ Vélo électrique` : `🚲 Vélo mécanique`;
+    if (rangePct !== null) tip += ` · 🔋 ${rangePct}%`;
+    circle.bindTooltip(tip, { direction: 'top', className: '' });
+
+    circle.addTo(bikeLayer);
+  });
+}
+
+// ================================================================
+// POPUP
+// ================================================================
+function getVehicleTypeInfo(vtId) {
+  const vt = state.vehicleTypes.get(vtId);
+  if (!vt) return { name: 'Vélo', icon: '🚲', isElectric: false, maxRange: 0 };
+  const isElectric = vt.propulsion_type === 'electric_assist' || vt.propulsion_type === 'electric';
+  return {
+    name: vt.name?.replace(/_/g, ' ') || (isElectric ? 'Électrique' : 'Mécanique'),
+    icon: isElectric ? '⚡' : '🚲',
+    isElectric,
+    maxRange: vt.max_range_meters || 0,
+  };
+}
+
+function createPopupContent(station) {
+  const isOpen = station.isInstalled && station.isRenting;
+  const { main } = getStationColor(station.bikes, station.capacity, isOpen);
+  const effectiveCap = Math.max(station.capacity, station.bikes + station.docks) || 1;
+  const pct = Math.round((station.bikes / effectiveCap) * 100);
+
+  const statusText = !station.isInstalled ? '🔧 Hors service'
+    : !station.isRenting ? '⏸️ Location suspendue'
+    : station.isCharging ? '⚡ Station de recharge' : '✅ Opérationnelle';
+
+  // Vehicle type breakdown
+  let typesHtml = '';
+  const vtAvail = station.vehicleTypesAvailable.filter(v => v.count > 0);
+  if (vtAvail.length > 0) {
+    typesHtml = '<div class="popup-types">' + vtAvail.map(v => {
+      const info = getVehicleTypeInfo(v.vehicle_type_id);
+      const bgColor = info.isElectric ? 'rgba(251,191,36,0.15)' : 'rgba(45,212,191,0.15)';
+      const color = info.isElectric ? '#FBBF24' : '#2DD4BF';
+      return `<span class="popup-type-badge" style="background:${bgColor};color:${color}">${info.icon} ${v.count}</span>`;
+    }).join('') + '</div>';
+  }
+
+  // Action buttons
+  const rentalUri = getRentalUri(station.rentalUris);
+  const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lon}&travelmode=walking`;
+
+  return `
+    <div class="popup-content">
+      <h3 class="popup-title">${station.name}</h3>
+      <div class="popup-status">${statusText}</div>
+      <div class="popup-bar-wrapper">
+        <div class="popup-bar" style="width:${pct}%; background:${main}"></div>
+      </div>
+      <div class="popup-stats">
+        <div class="popup-stat">
+          <span class="popup-stat-value" style="color:${main}">${station.bikes}</span>
+          <span class="popup-stat-label">vélos</span>
+        </div>
+        <div class="popup-stat">
+          <span class="popup-stat-value">${station.docks}</span>
+          <span class="popup-stat-label">places</span>
+        </div>
+        <div class="popup-stat">
+          <span class="popup-stat-value" style="font-size:16px">${station.capacity}</span>
+          <span class="popup-stat-label">capacité</span>
+        </div>
+      </div>
+      ${typesHtml}
+      <div class="popup-actions">
+        ${rentalUri ? `<a href="${rentalUri}" class="popup-btn popup-btn-primary" target="_blank" rel="noopener">📱 Levélo</a>` : ''}
+        <a href="${directionsUrl}" class="popup-btn popup-btn-secondary" target="_blank" rel="noopener">🧭 Y aller</a>
+      </div>
+    </div>
+  `;
+}
+
+function getRentalUri(uris) {
+  if (!uris) return null;
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/i.test(ua)) return uris.ios || uris.android || null;
+  if (/Android/i.test(ua)) return uris.android || uris.ios || null;
+  return uris.ios || uris.android || uris.web || null;
+}
+
+// ================================================================
+// SIDEBAR
+// ================================================================
+function updateStats() {
+  let totalBikes = 0, totalDocks = 0, activeStations = 0;
+  state.stations.forEach(s => {
+    if (s.isInstalled) {
+      totalBikes += s.bikes;
+      totalDocks += s.docks;
+      activeStations++;
+    }
+  });
+
+  document.getElementById('stat-bikes').textContent = totalBikes;
+  document.getElementById('stat-docks').textContent = totalDocks;
+  document.getElementById('stat-stations').textContent = activeStations;
+  document.getElementById('toggle-count').textContent = totalBikes;
+}
+
+function getFilteredStations() {
+  let list = Array.from(state.stations.values());
+
+  // Search
+  if (state.searchQuery) {
+    const q = normalizeText(state.searchQuery);
+    list = list.filter(s => normalizeText(s.name).includes(q));
+  }
+
+  // Filters
+  if (state.filters.hasBikes) list = list.filter(s => s.bikes > 0);
+  if (state.filters.hasDocks) list = list.filter(s => s.docks > 0);
+  if (state.filters.isCharging) list = list.filter(s => s.isCharging);
+
+  // Sort: by distance if geoloc, else alphabetically
+  if (state.userLat !== null) {
+    list.forEach(s => {
+      s._dist = haversine(state.userLat, state.userLon, s.lat, s.lon);
+    });
+    list.sort((a, b) => a._dist - b._dist);
+  } else {
+    list.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  }
+
+  return list;
+}
+
+function renderStationList() {
+  const container = document.getElementById('station-list');
+  const filtered = getFilteredStations();
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<div class="station-list-empty">Aucune station trouvée</div>';
+    return;
+  }
+
+  container.innerHTML = filtered.map(s => {
+    const isOpen = s.isInstalled && s.isRenting;
+    const { main } = getStationColor(s.bikes, s.capacity, isOpen);
+    const effectiveCap = Math.max(s.capacity, s.bikes + s.docks) || 1;
+    const pct = Math.round((s.bikes / effectiveCap) * 100);
+    const distText = s._dist != null ? formatDistance(s._dist) : '';
+
+    let badges = '';
+    const vtAvail = s.vehicleTypesAvailable.filter(v => v.count > 0);
+    vtAvail.forEach(v => {
+      const info = getVehicleTypeInfo(v.vehicle_type_id);
+      if (info.isElectric) {
+        badges += `<span class="badge badge-electric">⚡ ${v.count}</span>`;
+      }
+    });
+    if (s.isCharging) badges += `<span class="badge badge-charging">🔌</span>`;
+
+    return `
+      <div class="station-card" data-station-id="${s.id}" onclick="flyToStation('${s.id}')"
+           style="animation: fade-in 0.3s ease both; animation-delay: 0ms;">
+        <div class="station-card-header">
+          <span class="station-card-name">${s.name}</span>
+          ${distText ? `<span class="station-card-distance">${distText}</span>` : ''}
+        </div>
+        <div class="station-card-bar">
+          <div class="station-card-bar-fill" style="width:${pct}%; background:${main}"></div>
+        </div>
+        <div class="station-card-meta">
+          <span>🚲 ${s.bikes}</span>
+          <span>🅿️ ${s.docks}</span>
+        </div>
+        ${badges ? `<div class="station-card-badges">${badges}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function flyToStation(stationId) {
+  const station = state.stations.get(stationId);
+  if (!station) return;
+
+  map.flyTo([station.lat, station.lon], 17, { duration: 0.8 });
+
+  // Open popup
+  stationLayer.eachLayer(layer => {
+    if (layer.options.stationId === stationId) {
+      setTimeout(() => layer.openPopup(), 400);
+    }
+  });
+
+  // Close sidebar on mobile
+  if (window.innerWidth <= 768) {
+    document.getElementById('sidebar').classList.remove('open');
+  }
+
+  highlightStationCard(stationId);
+}
+
+function highlightStationCard(stationId) {
+  document.querySelectorAll('.station-card').forEach(card => {
+    card.classList.toggle('highlighted', card.dataset.stationId === stationId);
+  });
+
+  // Scroll card into view
+  const card = document.querySelector(`.station-card[data-station-id="${stationId}"]`);
+  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ================================================================
+// SEARCH & FILTERS
+// ================================================================
+function setupSearch() {
+  const input = document.getElementById('search-input');
+  let debounce;
+  input.addEventListener('input', () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => {
+      state.searchQuery = input.value.trim();
+      renderStationList();
+    }, 200);
+  });
+}
+
+function setupFilters() {
+  document.querySelectorAll('.filter-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      const filter = pill.dataset.filter;
+      state.filters[filter] = !state.filters[filter];
+      pill.classList.toggle('active', state.filters[filter]);
+      renderStationList();
+    });
+  });
+}
+
+// ================================================================
+// SIDEBAR TOGGLE
+// ================================================================
+function setupSidebarToggle() {
+  const sidebar = document.getElementById('sidebar');
+  const toggle = document.getElementById('sidebar-toggle');
+  const close = document.getElementById('sidebar-close');
+
+  toggle.addEventListener('click', () => sidebar.classList.add('open'));
+  close.addEventListener('click', () => sidebar.classList.remove('open'));
+}
+
+// ================================================================
+// REFRESH & COUNTDOWN
+// ================================================================
+function startAutoRefresh() {
+  clearInterval(state.refreshTimer);
+  clearInterval(state.countdownTimer);
+
+  state.countdownSec = 60;
+  updateCountdown();
+
+  state.countdownTimer = setInterval(() => {
+    state.countdownSec--;
+    updateCountdown();
+  }, 1000);
+
+  state.refreshTimer = setInterval(async () => {
+    state.countdownSec = 60;
+    const ok = await loadAllData();
+    if (ok) {
+      renderStations();
+      renderFreeBikes();
+      updateStats();
+      renderStationList();
+      updateLastUpdated();
+      showToast('✅ Données mises à jour');
+    }
+  }, REFRESH_MS);
+}
+
+function updateCountdown() {
+  const s = Math.max(0, state.countdownSec);
+  document.getElementById('countdown-text').textContent = `⟳ ${s}s`;
+  document.getElementById('countdown-bar').style.width = `${(s / 60) * 100}%`;
+}
+
+function updateLastUpdated() {
+  if (!state.lastUpdated) return;
+  const t = state.lastUpdated.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  document.getElementById('last-update').textContent = `MAJ : ${t}`;
+}
+
+// ================================================================
+// UI HELPERS
+// ================================================================
+function showToast(message) {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+function showError() {
+  document.getElementById('error-banner').classList.add('show');
+}
+
+function hideError() {
+  document.getElementById('error-banner').classList.remove('show');
+}
+
+// ================================================================
+// UTILS
+// ================================================================
+function normalizeText(str) {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = x => x * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDistance(meters) {
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
+// ================================================================
+// FREE BIKES ON ZOOM
+// ================================================================
+function setupZoomHandler() {
+  map.on('zoomend', () => {
+    renderFreeBikes();
+  });
+}
+
+// ================================================================
+// INIT
+// ================================================================
+async function init() {
+  initMap();
+  setupSearch();
+  setupFilters();
+  setupSidebarToggle();
+  setupZoomHandler();
+
+  const ok = await loadAllData();
+
+  document.getElementById('loading-overlay').classList.add('hidden');
+
+  if (ok) {
+    renderStations();
+    renderFreeBikes();
+    updateStats();
+    renderStationList();
+    updateLastUpdated();
+    startAutoRefresh();
+    showToast('🚲 BikinMars est prêt !');
+  }
+}
+
+init();
+</script>
+</body>
+</html>
