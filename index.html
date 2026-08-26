@@ -1365,12 +1365,19 @@ function createPopupContent(station) {
 }
 
 function getRentalUri(uris, bike) {
-  // Si le vélo a un code physique appairé (QR code), utiliser le lien de déverrouillage direct
+  // 1. Si le vélo a un code physique appairé (QR code à 6 chiffres), utiliser le lien direct
   const physicalCode = bike?.physical_code || (bike?.bike_id ? state.bikeHealth.get(bike.bike_id)?.physical_code : null);
   if (physicalCode) {
     return `https://www.thisebike.com/?bike_id=${physicalCode}`;
   }
 
+  // 2. Pour TOUS les vélos de la flotte : générer le lien direct thisebike avec le bike_id
+  const bikeId = bike?.bike_id || (typeof bike === 'string' ? bike : null);
+  if (bikeId) {
+    return `https://www.thisebike.com/?bike_id=${bikeId}`;
+  }
+
+  // 3. Fallback URI standard
   if (!uris) return null;
   const ua = navigator.userAgent;
   if (/iPhone|iPad|iPod/i.test(ua)) return uris.ios || uris.android || null;
