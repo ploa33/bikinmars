@@ -847,9 +847,11 @@ const ENDPOINTS = {
 const REFRESH_MS = 60_000;
 const MARSEILLE_CENTER = [43.2965, 5.3764];
 
+const CARTO_API_KEY = 'cb1_26b6_1_4b8ca9abb34e765c27700a57';
+
 const TILE_URLS = {
-  light: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-  dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+  light: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${CARTO_API_KEY}`,
+  dark: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${CARTO_API_KEY}`
 };
 
 const CORS_PROXIES = [
@@ -1036,7 +1038,7 @@ function initMap() {
 
   const initialTileUrl = state.theme === 'dark' ? TILE_URLS.dark : TILE_URLS.light;
   tileLayer = L.tileLayer(initialTileUrl, {
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a> · <a href="https://osm.org/">OSM</a> · BikinMars',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a> · BikinMars',
     maxZoom: 19,
     subdomains: 'abcd',
   }).addTo(map);
