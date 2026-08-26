@@ -597,10 +597,31 @@ a { color: inherit; text-decoration: none; }
 .popup-bike-item:hover {
   border-color: var(--border-hover);
 }
+.popup-bike-item.recommended {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+.popup-bike-item.warning-bike {
+  border-color: var(--danger);
+  background: var(--danger-bg);
+  opacity: 0.85;
+}
 .popup-bike-name {
   font-weight: 600;
   color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
+.popup-health-tag {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.tag-recommended { background: var(--accent); color: white; }
+.tag-warning { background: var(--danger); color: white; }
 .popup-bike-battery {
   font-weight: 500;
   color: var(--text-secondary);
@@ -622,6 +643,13 @@ a { color: inherit; text-decoration: none; }
 .popup-bike-btn:hover {
   background: var(--accent);
   color: white;
+}
+.popup-bikes-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  margin-bottom: 12px;
+  font-style: italic;
 }
 
 /* ==================== TOAST ==================== */
@@ -842,6 +870,7 @@ const state = {
   userLon: null,
   searchQuery: '',
   filters: { hasBikes: false, hasDocks: false, isCharging: false },
+  bikeHealth: new Map(),    // bike_id → { health_score, boomerangs_24h, trips_24h, recent_avg_speed_kmh, physical_code }
   lastUpdated: null,
   refreshTimer: null,
   countdownTimer: null,
@@ -947,12 +976,49 @@ async function loadAllData() {
       !b.is_disabled && !b.is_reserved && (!b.station_id || b.station_id === '')
     );
 
+    // Synchronisation de la santé des vélos (Supabase / JSON)
+    await fetchBikeHealth().catch(() => {});
+
     state.lastUpdated = new Date();
     return true;
   } catch (err) {
     console.error('Data loading failed:', err);
     showError();
     return false;
+  }
+}
+
+const SUPABASE_DEFAULT_URL = 'https://gsjfopzecerceydcrkuv.supabase.co';
+
+async function fetchBikeHealth() {
+  try {
+    const sbUrl = localStorage.getItem('bikinmars-supabase-url') || SUPABASE_DEFAULT_URL;
+    const sbKey = localStorage.getItem('bikinmars-supabase-key') || '';
+    if (sbUrl && sbKey) {
+      const cleanUrl = sbUrl.replace(/\/$/, '');
+      const res = await fetch(`${cleanUrl}/rest/v1/vw_bikes_health?select=*`, {
+        headers: {
+          'apikey': sbKey,
+          'Authorization': `Bearer ${sbKey}`,
+        },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        state.bikeHealth.clear();
+        data.forEach(b => state.bikeHealth.set(b.bike_id, b));
+        return;
+      }
+    }
+    // Fallback fichier local statique
+    const localRes = await fetch('./data/bikes_health.json', { signal: AbortSignal.timeout(3000) });
+    if (localRes.ok) {
+      const data = await localRes.json();
+      state.bikeHealth.clear();
+      (data.bikes || []).forEach(b => state.bikeHealth.set(b.bike_id, b));
+    }
+  } catch (e) {
+    // Non-bloquant si le tracker n'a pas encore poussé de données
   }
 }
 
@@ -1191,39 +1257,72 @@ function createPopupContent(station) {
   const rentalUri = getRentalUri(station.rentalUris);
   const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lon}&travelmode=walking`;
 
-  // Get and sort individual bikes at this station by battery range
+  // Get and sort individual bikes at this station by health and battery range
   let bikesListHtml = '';
   const stationBikesList = state.stationBikes.get(station.id) || [];
   if (stationBikesList.length > 0) {
+    // Enrich with health data
+    stationBikesList.forEach(b => {
+      b._health = state.bikeHealth.get(b.bike_id) || { health_score: 100, boomerangs_24h: 0 };
+    });
+
+    // Sort: healthy first (0 boomerang), then highest battery
     stationBikesList.sort((a, b) => {
+      const aBoomerangs = a._health.boomerangs_24h || 0;
+      const bBoomerangs = b._health.boomerangs_24h || 0;
+      if (aBoomerangs !== bBoomerangs) {
+        return aBoomerangs - bBoomerangs; // Vélos sans boomerang en premier
+      }
+      const aScore = a._health.health_score ?? 100;
+      const bScore = b._health.health_score ?? 100;
+      if (Math.abs(aScore - bScore) > 20) {
+        return bScore - aScore;
+      }
       const aRange = a.current_range_meters || 0;
       const bRange = b.current_range_meters || 0;
       return bRange - aRange;
     });
 
-    bikesListHtml += '<div class="popup-bikes-list-title">⚡ Sélectionner un vélo :</div>';
+    bikesListHtml += '<div class="popup-bikes-list-title">⚡ Vélos en station (Classés par fiabilité) :</div>';
     bikesListHtml += '<div class="popup-bikes-scroll-container">';
+    
+    let hasRecommended = false;
     stationBikesList.forEach((bike, index) => {
       const vtInfo = getVehicleTypeInfo(bike.vehicle_type_id);
       const rangeKm = Math.round((bike.current_range_meters || 0) / 1000);
       const maxRange = vtInfo.maxRange || 40000;
       const rangePct = Math.round(((bike.current_range_meters || 0) / maxRange) * 100);
+      const health = bike._health || {};
+      const boomerangs = health.boomerangs_24h || 0;
+
+      const isWarning = boomerangs > 0 || (health.health_score != null && health.health_score < 40);
+      const isTop = !hasRecommended && vtInfo.isElectric && !isWarning && rangePct > 35;
+      if (isTop) hasRecommended = true;
 
       const batIcon = rangePct > 80 ? '🔋' : rangePct > 35 ? '🪫' : '⚠️';
       const bikeLabel = vtInfo.isElectric ? `Élec #${index + 1}` : `Méca #${index + 1}`;
-      const batteryText = vtInfo.isElectric ? `${batIcon} ${rangePct}% (${rangeKm} km)` : '🚲 Mécanique';
+      
+      let badgeHtml = '';
+      if (isTop) {
+        badgeHtml = '<span class="popup-health-tag tag-recommended">🏆 Top</span>';
+      } else if (isWarning) {
+        badgeHtml = `<span class="popup-health-tag tag-warning" title="${boomerangs} retour(s) immédiat(s)">⚠️ Suspect</span>`;
+      }
 
+      const batteryText = vtInfo.isElectric ? `${batIcon} ${rangePct}% (${rangeKm} km)` : '🚲 Mécanique';
       const bikeUri = getRentalUri(bike.rental_uris);
+      const itemClass = isTop ? 'popup-bike-item recommended' : (isWarning ? 'popup-bike-item warning-bike' : 'popup-bike-item');
 
       bikesListHtml += `
-        <div class="popup-bike-item">
-          <span class="popup-bike-name">${bikeLabel}</span>
+        <div class="${itemClass}">
+          <span class="popup-bike-name">${bikeLabel} ${badgeHtml}</span>
           <span class="popup-bike-battery">${batteryText}</span>
           ${bikeUri ? `<a href="${bikeUri}" class="popup-bike-btn" target="_blank" rel="noopener">Louer</a>` : ''}
         </div>
       `;
     });
     bikesListHtml += '</div>';
+    bikesListHtml += '<div class="popup-bikes-hint">💡 Identifiez le vélo sur la borne grâce à sa jauge de batterie.</div>';
   }
 
   return `
