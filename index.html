@@ -1196,7 +1196,10 @@ function renderFreeBikes() {
           boxShadow: '0 2px 5px rgba(0,0,0,0.3)',
         });
 
-        const bikeLabel = vtInfo.isElectric ? `Élec #${index + 1}` : `Méca #${index + 1}`;
+        const health = state.bikeHealth.get(bike.bike_id) || {};
+        const physicalCode = health.physical_code || bike.physical_code;
+        const baseLabel = vtInfo.isElectric ? `Élec #${index + 1}` : `Méca #${index + 1}`;
+        const bikeLabel = physicalCode ? `${baseLabel} (N°${physicalCode})` : baseLabel;
         let tip = `<b>${bikeLabel} (En station)</b><br/>`;
         if (vtInfo.isElectric) {
           tip += `⚡ Électrique · 🔋 ${rangePct}% (${rangeKm} km)`;
