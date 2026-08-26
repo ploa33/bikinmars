@@ -989,11 +989,12 @@ async function loadAllData() {
 }
 
 const SUPABASE_DEFAULT_URL = 'https://gsjfopzecerceydcrkuv.supabase.co';
+const SUPABASE_DEFAULT_KEY = 'sb_publishable_EnOQfKmH5sD71lnO8QU_aw_ZQz6PG4h';
 
 async function fetchBikeHealth() {
   try {
     const sbUrl = localStorage.getItem('bikinmars-supabase-url') || SUPABASE_DEFAULT_URL;
-    const sbKey = localStorage.getItem('bikinmars-supabase-key') || '';
+    const sbKey = localStorage.getItem('bikinmars-supabase-key') || SUPABASE_DEFAULT_KEY;
     if (sbUrl && sbKey) {
       const cleanUrl = sbUrl.replace(/\/$/, '');
       const res = await fetch(`${cleanUrl}/rest/v1/vw_bikes_health?select=*`, {
