@@ -1150,7 +1150,7 @@ function renderFreeBikes() {
     let tip = vtInfo.isElectric ? `⚡ Vélo électrique (Free-floating)` : `🚲 Vélo mécanique (Free-floating)`;
     if (vtInfo.isElectric) tip += ` · 🔋 ${rangePct}% (${Math.round(bike.current_range_meters / 1000)} km)`;
     
-    const bikeUri = getRentalUri(bike.rental_uris);
+    const bikeUri = getRentalUri(bike.rental_uris, bike);
     if (bikeUri) {
       circle.on('click', () => {
         window.open(bikeUri, '_blank', 'noopener');
@@ -1204,7 +1204,7 @@ function renderFreeBikes() {
           tip += `🚲 Mécanique`;
         }
 
-        const bikeUri = getRentalUri(bike.rental_uris);
+        const bikeUri = getRentalUri(bike.rental_uris, bike);
         if (bikeUri) {
           circle.on('click', () => {
             window.open(bikeUri, '_blank', 'noopener');
@@ -1296,6 +1296,7 @@ function createPopupContent(station) {
       const maxRange = vtInfo.maxRange || 40000;
       const rangePct = Math.round(((bike.current_range_meters || 0) / maxRange) * 100);
       const health = bike._health || {};
+      const physicalCode = health.physical_code || bike.physical_code;
       const boomerangs = health.boomerangs_24h || 0;
 
       const isWarning = boomerangs > 0 || (health.health_score != null && health.health_score < 40);
@@ -1303,7 +1304,8 @@ function createPopupContent(station) {
       if (isTop) hasRecommended = true;
 
       const batIcon = rangePct > 80 ? '🔋' : rangePct > 35 ? '🪫' : '⚠️';
-      const bikeLabel = vtInfo.isElectric ? `Élec #${index + 1}` : `Méca #${index + 1}`;
+      const baseLabel = vtInfo.isElectric ? `Élec #${index + 1}` : `Méca #${index + 1}`;
+      const bikeLabel = physicalCode ? `${baseLabel} <small style="opacity:0.8;font-weight:600;">(N°${physicalCode})</small>` : baseLabel;
       
       let badgeHtml = '';
       if (isTop) {
@@ -1313,7 +1315,7 @@ function createPopupContent(station) {
       }
 
       const batteryText = vtInfo.isElectric ? `${batIcon} ${rangePct}% (${rangeKm} km)` : '🚲 Mécanique';
-      const bikeUri = getRentalUri(bike.rental_uris);
+      const bikeUri = getRentalUri(bike.rental_uris, bike);
       const itemClass = isTop ? 'popup-bike-item recommended' : (isWarning ? 'popup-bike-item warning-bike' : 'popup-bike-item');
 
       bikesListHtml += `
@@ -1359,7 +1361,13 @@ function createPopupContent(station) {
   `;
 }
 
-function getRentalUri(uris) {
+function getRentalUri(uris, bike) {
+  // Si le vélo a un code physique appairé (QR code), utiliser le lien de déverrouillage direct
+  const physicalCode = bike?.physical_code || (bike?.bike_id ? state.bikeHealth.get(bike.bike_id)?.physical_code : null);
+  if (physicalCode) {
+    return `https://www.thisebike.com/?bike_id=${physicalCode}`;
+  }
+
   if (!uris) return null;
   const ua = navigator.userAgent;
   if (/iPhone|iPad|iPod/i.test(ua)) return uris.ios || uris.android || null;
