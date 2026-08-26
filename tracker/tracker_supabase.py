@@ -70,11 +70,16 @@ def supabase_request(endpoint, method="GET", data=None, params=None, prefer=None
     body = json.dumps(data).encode("utf-8") if data is not None else None
     req = urllib.request.Request(url, data=body, headers=headers, method=method)
 
-    with urllib.request.urlopen(req, timeout=15) as res:
-        if res.status in (200, 201, 204):
-            content = res.read().decode("utf-8")
-            return json.loads(content) if content else []
-        raise Exception(f"Supabase error {res.status}: {res.read().decode('utf-8')}")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as res:
+            if res.status in (200, 201, 204):
+                content = res.read().decode("utf-8")
+                return json.loads(content) if content else []
+            raise Exception(f"Supabase error {res.status}: {res.read().decode('utf-8')}")
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8") if e.fp else str(e)
+        print(f"❌ Erreur Supabase {e.code} sur {endpoint}: {err_body}", file=sys.stderr)
+        raise Exception(f"Supabase HTTP {e.code} sur {endpoint}: {err_body}")
 
 def sync_stations_to_supabase(stations_data):
     """Upsert des stations dans Supabase."""
@@ -132,86 +137,72 @@ def process_and_sync_supabase():
         if not bike_id:
             continue
 
-        curr_station = b.get("station_id") or ""
+        curr_station = b.get("station_id") or None
         curr_lat = float(b.get("lat", 0.0))
         curr_lon = float(b.get("lon", 0.0))
         curr_range = int(b.get("current_range_meters", 0))
         curr_disabled = bool(b.get("is_disabled"))
         v_type = str(b.get("vehicle_type_id", ""))
 
-        if bike_id not in known_bikes:
-            # Premier enregistrement
-            bikes_to_upsert.append({
-                "bike_id": bike_id,
-                "vehicle_type_id": v_type,
-                "first_seen": now_iso,
-                "last_seen": now_iso,
-                "last_station_id": curr_station,
-                "last_lat": curr_lat,
-                "last_lon": curr_lon,
-                "last_range_meters": curr_range,
-                "last_disabled": curr_disabled,
-                "status": "station" if curr_station else "free_floating"
-            })
-            continue
+        if bike_id in known_bikes:
+            prev = known_bikes[bike_id]
+            prev_station = prev.get("last_station_id") or None
+            prev_lat = float(prev.get("last_lat") or 0.0)
+            prev_lon = float(prev.get("last_lon") or 0.0)
+            prev_range = int(prev.get("last_range_meters") or 0)
 
-        prev = known_bikes[bike_id]
-        prev_station = prev.get("last_station_id") or ""
-        prev_lat = float(prev.get("last_lat") or 0.0)
-        prev_lon = float(prev.get("last_lon") or 0.0)
-        prev_range = int(prev.get("last_range_meters") or 0)
+            # Détection FIN DE TRAJET
+            if bike_id in active_trips:
+                atrip = active_trips[bike_id]
+                start_time = datetime.fromisoformat(atrip["start_time"].replace("Z", "+00:00"))
+                duration_sec = max(1, int((now - start_time).total_seconds()))
 
-        # Détection FIN DE TRAJET
-        if bike_id in active_trips:
-            atrip = active_trips[bike_id]
-            start_time = datetime.fromisoformat(atrip["start_time"].replace("Z", "+00:00"))
-            duration_sec = max(1, int((now - start_time).total_seconds()))
+                if curr_station or (duration_sec >= 120 and haversine(atrip["start_lat"], atrip["start_lon"], curr_lat, curr_lon) > 50):
+                    distance_m = haversine(atrip["start_lat"], atrip["start_lon"], curr_lat, curr_lon)
+                    speed_kmh = round(min((distance_m / duration_sec) * 3.6, 45.0), 1)
+                    start_range = atrip.get("start_range_meters")
+                    battery_delta = (start_range - curr_range) if start_range is not None else 0
 
-            if curr_station or (duration_sec >= 120 and haversine(atrip["start_lat"], atrip["start_lon"], curr_lat, curr_lon) > 50):
-                distance_m = haversine(atrip["start_lat"], atrip["start_lon"], curr_lat, curr_lon)
-                speed_kmh = round(min((distance_m / duration_sec) * 3.6, 45.0), 1)
-                start_range = atrip.get("start_range_meters")
-                battery_delta = (start_range - curr_range) if start_range is not None else 0
+                    is_boomerang = bool(atrip.get("start_station_id") and curr_station and atrip["start_station_id"] == curr_station and duration_sec < 300)
+                    if is_boomerang:
+                        boomerangs_count += 1
 
-                is_boomerang = bool(atrip.get("start_station_id") and curr_station and atrip["start_station_id"] == curr_station and duration_sec < 300)
-                if is_boomerang:
-                    boomerangs_count += 1
+                    completed_trips_to_insert.append({
+                        "bike_id": bike_id,
+                        "start_station_id": atrip.get("start_station_id"),
+                        "end_station_id": curr_station,
+                        "start_lat": atrip["start_lat"],
+                        "start_lon": atrip["start_lon"],
+                        "end_lat": curr_lat,
+                        "end_lon": curr_lon,
+                        "start_time": atrip["start_time"],
+                        "end_time": now_iso,
+                        "duration_sec": duration_sec,
+                        "distance_meters": round(distance_m, 1),
+                        "avg_speed_kmh": speed_kmh,
+                        "start_range_meters": start_range,
+                        "end_range_meters": curr_range,
+                        "battery_delta_meters": battery_delta,
+                        "is_boomerang": is_boomerang
+                    })
+                    active_trips_to_delete.append(bike_id)
+                    trips_finished += 1
 
-                completed_trips_to_insert.append({
+            # Détection DÉBUT DE TRAJET
+            elif prev_station and (not curr_station or curr_station != prev_station):
+                active_trips_to_upsert.append({
                     "bike_id": bike_id,
-                    "start_station_id": atrip.get("start_station_id"),
-                    "end_station_id": curr_station,
-                    "start_lat": atrip["start_lat"],
-                    "start_lon": atrip["start_lon"],
-                    "end_lat": curr_lat,
-                    "end_lon": curr_lon,
-                    "start_time": atrip["start_time"],
-                    "end_time": now_iso,
-                    "duration_sec": duration_sec,
-                    "distance_meters": round(distance_m, 1),
-                    "avg_speed_kmh": speed_kmh,
-                    "start_range_meters": start_range,
-                    "end_range_meters": curr_range,
-                    "battery_delta_meters": battery_delta,
-                    "is_boomerang": is_boomerang
+                    "start_station_id": prev_station,
+                    "start_lat": prev_lat,
+                    "start_lon": prev_lon,
+                    "start_time": now_iso,
+                    "start_range_meters": prev_range,
+                    "last_seen_time": now_iso
                 })
-                active_trips_to_delete.append(bike_id)
-                trips_finished += 1
+                trips_started += 1
 
-        # Détection DÉBUT DE TRAJET
-        elif prev_station and (not curr_station or curr_station != prev_station):
-            active_trips_to_upsert.append({
-                "bike_id": bike_id,
-                "start_station_id": prev_station,
-                "start_lat": prev_lat,
-                "start_lon": prev_lon,
-                "start_time": now_iso,
-                "start_range_meters": prev_range,
-                "last_seen_time": now_iso
-            })
-            trips_started += 1
-
-        # Mise à jour de l'état du vélo
+        # Enregistrement uniforme pour tous les vélos (clés identiques pour PostgREST)
+        bike_status = "in_trip" if bike_id in active_trips else ("station" if curr_station else "free_floating")
         bikes_to_upsert.append({
             "bike_id": bike_id,
             "vehicle_type_id": v_type,
@@ -221,7 +212,7 @@ def process_and_sync_supabase():
             "last_lon": curr_lon,
             "last_range_meters": curr_range,
             "last_disabled": curr_disabled,
-            "status": "in_trip" if bike_id in active_trips else ("station" if curr_station else "free_floating")
+            "status": bike_status
         })
 
     # 4. Exécution des batchs Supabase
