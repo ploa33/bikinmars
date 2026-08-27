@@ -1365,24 +1365,27 @@ function createPopupContent(station) {
 }
 
 function getRentalUri(uris, bike) {
-  // 1. Si le vélo a un code physique appairé (QR code à 6 chiffres), utiliser le lien direct
+  // 1. Si le vélo a un code physique appairé (QR code à 6 chiffres, ex: 124692)
   const physicalCode = bike?.physical_code || (bike?.bike_id ? state.bikeHealth.get(bike.bike_id)?.physical_code : null);
-  if (physicalCode) {
-    return `https://www.thisebike.com/?bike_id=${physicalCode}`;
+  if (physicalCode && /^\d+$/.test(String(physicalCode).trim())) {
+    return `https://www.thisebike.com/?bike_id=${String(physicalCode).trim()}`;
   }
 
-  // 2. Pour TOUS les vélos de la flotte : générer le lien direct thisebike avec le bike_id
+  // 2. Si on a des URIs de l'application Levélo (vid=UUID)
+  if (uris) {
+    const ua = navigator.userAgent;
+    if (/iPhone|iPad|iPod/i.test(ua)) return uris.ios || uris.android || null;
+    if (/Android/i.test(ua)) return uris.android || uris.ios || null;
+    return uris.ios || uris.android || uris.web || null;
+  }
+
+  // 3. Fallback direct vers l'application Levélo
   const bikeId = bike?.bike_id || (typeof bike === 'string' ? bike : null);
   if (bikeId) {
-    return `https://www.thisebike.com/?bike_id=${bikeId}`;
+    return `levelo://app?vid=${bikeId}`;
   }
 
-  // 3. Fallback URI standard
-  if (!uris) return null;
-  const ua = navigator.userAgent;
-  if (/iPhone|iPad|iPod/i.test(ua)) return uris.ios || uris.android || null;
-  if (/Android/i.test(ua)) return uris.android || uris.ios || null;
-  return uris.ios || uris.android || uris.web || null;
+  return 'https://levelo.ampmetropole.fr/fr/sharing?app=1';
 }
 
 // ================================================================
