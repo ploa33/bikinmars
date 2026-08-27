@@ -464,6 +464,221 @@ a { color: inherit; text-decoration: none; }
   }
 }
 
+/* ==================== DEBUG / BIKE FINDER ==================== */
+.debug-toggle-btn {
+  position: fixed;
+  top: 10px;
+  right: 105px;
+  z-index: 1000;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 4px;
+  background: var(--bg-glass) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-primary) !important;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.15);
+  transition: all var(--transition);
+  cursor: pointer;
+}
+.debug-toggle-btn:hover {
+  background: var(--bg-glass-hover) !important;
+  border-color: var(--border-hover) !important;
+  transform: scale(1.03);
+}
+@media (max-width: 768px) {
+  .debug-toggle-btn {
+    top: auto;
+    bottom: 24px;
+    left: 20px;
+    right: auto;
+    border-radius: 50px;
+    height: 48px;
+    padding: 0 16px;
+    font-size: 13px;
+    box-shadow: var(--shadow);
+  }
+}
+
+.debug-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.debug-modal-overlay.open { display: flex; }
+.debug-modal {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  width: 100%;
+  max-width: 860px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: fade-in 0.25s ease;
+}
+.debug-modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-glass);
+}
+.debug-modal-title { font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+.debug-modal-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.debug-modal-close:hover { background: var(--danger-bg); color: var(--danger); }
+.debug-search-section {
+  padding: 14px 20px;
+  background: var(--bg-glass);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.debug-search-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: all var(--transition);
+}
+.debug-search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
+.debug-filter-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.debug-pill {
+  font-size: 11px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: all var(--transition);
+}
+.debug-pill:hover { border-color: var(--border-hover); color: var(--text-primary); }
+.debug-pill.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.debug-stats-bar {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.debug-list-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.debug-bike-card {
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all var(--transition);
+}
+.debug-bike-card:hover { border-color: var(--border-hover); background: var(--bg-glass-hover); }
+.debug-bike-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.debug-bike-title { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.debug-uuid-box {
+  font-family: monospace;
+  font-size: 10px;
+  background: var(--bg-secondary);
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: all;
+}
+.debug-uuid-box:hover { color: var(--text-primary); border-color: var(--accent); }
+.debug-bike-actions { display: flex; gap: 6px; align-items: center; }
+.debug-btn-action {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--transition);
+}
+.debug-btn-action:hover { border-color: var(--accent); color: var(--accent); }
+.debug-btn-rent {
+  background: var(--accent-glow);
+  color: var(--accent);
+  border-color: transparent;
+}
+.debug-btn-rent:hover {
+  background: var(--accent);
+  color: white;
+}
+.debug-code-input {
+  width: 90px;
+  font-size: 11px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-weight: 600;
+  text-align: center;
+}
+
 /* ==================== POPUP ==================== */
 .leaflet-popup-content-wrapper {
   background: var(--bg-glass) !important;
@@ -765,8 +980,42 @@ a { color: inherit; text-decoration: none; }
 <!-- ==================== MAP ==================== -->
 <div id="map"></div>
 
-<!-- ==================== FLOATING THEME TOGGLE ==================== -->
+<!-- ==================== FLOATING CONTROLS ==================== -->
+<button class="debug-toggle-btn" id="debug-toggle-btn" aria-label="Explorateur & Debug Vélos">🔍 Vélos / Debug</button>
 <button class="theme-toggle" id="theme-toggle" aria-label="Changer de thème">🌙</button>
+
+<!-- ==================== DEBUG / BIKE FINDER MODAL ==================== -->
+<div class="debug-modal-overlay" id="debug-modal-overlay">
+  <div class="debug-modal">
+    <div class="debug-modal-header">
+      <div class="debug-modal-title">
+        <span>🔍</span>
+        <span>Explorateur & Tracker de Vélos (Marseille)</span>
+      </div>
+      <button class="debug-modal-close" id="debug-modal-close" aria-label="Fermer">✕</button>
+    </div>
+
+    <div class="debug-search-section">
+      <input type="search" class="debug-search-input" id="debug-search-input" placeholder="Rechercher par numéro (ex: 124692), UUID, nom de station, ou batterie..." autocomplete="off" />
+      <div class="debug-filter-pills">
+        <button class="debug-pill active" data-debug-filter="all">Tous (<span id="debug-count-all">0</span>)</button>
+        <button class="debug-pill" data-debug-filter="electric">⚡ Électriques</button>
+        <button class="debug-pill" data-debug-filter="station">🅿️ En Station</button>
+        <button class="debug-pill" data-debug-filter="free">📍 Free-Floating</button>
+        <button class="debug-pill" data-debug-filter="matched">🏷️ Avec N° QR Code</button>
+        <button class="debug-pill" data-debug-filter="disabled">⚠️ Hors service (0%)</button>
+      </div>
+      <div class="debug-stats-bar">
+        <span id="debug-stats-text">Chargement des données...</span>
+        <span>💡 Cliquez sur 🧭 pour afficher le vélo sur la carte</span>
+      </div>
+    </div>
+
+    <div class="debug-list-container" id="debug-list-container">
+      <!-- Vélos injectés dynamiquement -->
+    </div>
+  </div>
+</div>
 
 <!-- ==================== SIDEBAR ==================== -->
 <aside class="sidebar" id="sidebar">
@@ -865,6 +1114,7 @@ const CORS_PROXIES = [
 const state = {
   theme: 'light',           // 'light' or 'dark'
   stations: new Map(),      // station_id → merged station object
+  allBikes: [],             // all current raw bikes in Marseille
   freeBikes: [],            // available free-floating bikes
   stationBikes: new Map(),  // station_id → array of docked bike objects
   vehicleTypes: new Map(),  // vehicle_type_id → type info
@@ -873,18 +1123,27 @@ const state = {
   searchQuery: '',
   filters: { hasBikes: false, hasDocks: false, isCharging: false },
   bikeHealth: new Map(),    // bike_id → { health_score, boomerangs_24h, trips_24h, recent_avg_speed_kmh, physical_code }
+  customPhysicalCodes: new Map(), // bike_id → user-assigned physical code (persisted in localStorage)
   lastUpdated: null,
   refreshTimer: null,
   countdownTimer: null,
   countdownSec: 60,
 };
 
-// Initial theme setup (runs immediately to prevent flash of wrong theme)
-(function initTheme() {
+// Initial theme & custom codes setup
+(function initStorage() {
   const savedTheme = localStorage.getItem('bikinmars-theme');
   const preferredTheme = savedTheme || 'light';
   state.theme = preferredTheme;
   document.documentElement.setAttribute('data-theme', preferredTheme);
+
+  try {
+    const raw = localStorage.getItem('bikinmars-custom-codes');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      Object.entries(parsed).forEach(([k, v]) => state.customPhysicalCodes.set(k, v));
+    }
+  } catch (e) {}
 })();
 
 // ================================================================
@@ -977,6 +1236,9 @@ async function loadAllData() {
     state.freeBikes = (bikesData.data.bikes || []).filter(b =>
       !b.is_disabled && !b.is_reserved && (!b.station_id || b.station_id === '')
     );
+
+    // Tous les vélos pour l'explorateur / debug
+    state.allBikes = bikesData.data.bikes || [];
 
     // Synchronisation de la santé des vélos (Supabase / JSON)
     await fetchBikeHealth().catch(() => {});
@@ -1675,6 +1937,221 @@ function setupThemeToggle() {
 }
 
 // ================================================================
+// DEBUG / BIKE FINDER
+// ================================================================
+let debugActiveFilter = 'all';
+
+function getBikePhysicalCode(bikeId) {
+  if (!bikeId) return null;
+  const custom = state.customPhysicalCodes.get(bikeId);
+  if (custom) return custom;
+  const health = state.bikeHealth.get(bikeId);
+  if (health?.physical_code) return health.physical_code;
+  return null;
+}
+
+function saveBikePhysicalCode(bikeId, code) {
+  if (!bikeId) return;
+  const cleanCode = code ? String(code).trim() : '';
+  if (cleanCode && /^\d+$/.test(cleanCode)) {
+    state.customPhysicalCodes.set(bikeId, cleanCode);
+    showToast(`✅ Vélo appairé avec le N° ${cleanCode}`);
+  } else {
+    state.customPhysicalCodes.delete(bikeId);
+    showToast(`🗑️ Code physique supprimé`);
+  }
+  const obj = Object.fromEntries(state.customPhysicalCodes);
+  localStorage.setItem('bikinmars-custom-codes', JSON.stringify(obj));
+  
+  renderStations();
+  renderFreeBikes();
+  renderStationList();
+  renderDebugBikesList();
+}
+
+function setupDebugModal() {
+  const btn = document.getElementById('debug-toggle-btn');
+  const overlay = document.getElementById('debug-modal-overlay');
+  const closeBtn = document.getElementById('debug-modal-close');
+  const searchInput = document.getElementById('debug-search-input');
+
+  if (!btn || !overlay) return;
+
+  btn.addEventListener('click', () => {
+    overlay.classList.add('open');
+    renderDebugBikesList();
+    if (searchInput) searchInput.focus();
+  });
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      overlay.classList.remove('open');
+    });
+  }
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.classList.remove('open');
+  });
+
+  let debounce;
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        renderDebugBikesList();
+      }, 150);
+    });
+  }
+
+  document.querySelectorAll('.debug-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.debug-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      debugActiveFilter = pill.dataset.debugFilter;
+      renderDebugBikesList();
+    });
+  });
+}
+
+function renderDebugBikesList() {
+  const container = document.getElementById('debug-list-container');
+  if (!container) return;
+
+  const searchVal = normalizeText(document.getElementById('debug-search-input')?.value || '');
+  const allBikes = state.allBikes || [];
+
+  const countAllElem = document.getElementById('debug-count-all');
+  if (countAllElem) countAllElem.textContent = allBikes.length;
+
+  let filtered = allBikes.filter(bike => {
+    const vtInfo = getVehicleTypeInfo(bike.vehicle_type_id);
+    const physicalCode = getBikePhysicalCode(bike.bike_id) || '';
+    const station = bike.station_id ? state.stations.get(bike.station_id) : null;
+    const stationName = station ? station.name : 'Free-floating';
+    const rangeKm = Math.round((bike.current_range_meters || 0) / 1000);
+
+    // Filters
+    if (debugActiveFilter === 'electric' && !vtInfo.isElectric) return false;
+    if (debugActiveFilter === 'station' && (!bike.station_id || bike.station_id === '')) return false;
+    if (debugActiveFilter === 'free' && bike.station_id && bike.station_id !== '') return false;
+    if (debugActiveFilter === 'matched' && !physicalCode) return false;
+    if (debugActiveFilter === 'disabled' && !bike.is_disabled && rangeKm > 0) return false;
+
+    // Search
+    if (searchVal) {
+      const matchCode = physicalCode.toLowerCase().includes(searchVal);
+      const matchUuid = bike.bike_id.toLowerCase().includes(searchVal);
+      const matchStation = normalizeText(stationName).includes(searchVal);
+      const matchRange = `${rangeKm}km`.includes(searchVal) || `${rangeKm}` === searchVal;
+      return matchCode || matchUuid || matchStation || matchRange;
+    }
+
+    return true;
+  });
+
+  // Sort: matched first, then highest range
+  filtered.sort((a, b) => {
+    const aCode = getBikePhysicalCode(a.bike_id);
+    const bCode = getBikePhysicalCode(b.bike_id);
+    if (aCode && !bCode) return -1;
+    if (!aCode && bCode) return 1;
+    return (b.current_range_meters || 0) - (a.current_range_meters || 0);
+  });
+
+  const totalFiltered = filtered.length;
+  const displayLimit = 120;
+  const displayed = filtered.slice(0, displayLimit);
+
+  const matchedCount = allBikes.filter(b => getBikePhysicalCode(b.bike_id)).length;
+  const stationCount = allBikes.filter(b => b.station_id && b.station_id !== '').length;
+  const freeCount = allBikes.length - stationCount;
+
+  const statsTextElem = document.getElementById('debug-stats-text');
+  if (statsTextElem) {
+    statsTextElem.textContent = 
+      `${allBikes.length} vélos connectés (${stationCount} en station, ${freeCount} en rue, ${matchedCount} appairés) · Affichage : ${displayed.length}/${totalFiltered}`;
+  }
+
+  if (displayed.length === 0) {
+    container.innerHTML = `<div class="station-list-empty">Aucun vélo trouvé pour cette recherche</div>`;
+    return;
+  }
+
+  container.innerHTML = displayed.map(b => {
+    const vtInfo = getVehicleTypeInfo(b.vehicle_type_id);
+    const physicalCode = getBikePhysicalCode(b.bike_id) || '';
+    const station = b.station_id ? state.stations.get(b.station_id) : null;
+    const stationName = station ? `🅿️ Station <strong>${station.name}</strong>` : '📍 Free-floating (dans la rue)';
+    const maxRange = vtInfo.maxRange || 40000;
+    const rangeKm = Math.round((b.current_range_meters || 0) / 1000);
+    const rangePct = Math.round(((b.current_range_meters || 0) / maxRange) * 100);
+
+    const rentUrl = getRentalUri(b.rental_uris, b);
+    const batIcon = rangePct > 80 ? '🔋' : rangePct > 35 ? '🪫' : '⚠️';
+    const statusBadge = b.is_disabled ? '<span class="badge" style="background:var(--danger-bg);color:var(--danger);">Hors service</span>' 
+      : (b.is_reserved ? '<span class="badge" style="background:var(--warning-bg);color:var(--warning);">Réservé</span>' : '<span class="badge" style="background:var(--success-bg);color:var(--success);">Disponible</span>');
+
+    return `
+      <div class="debug-bike-card">
+        <div class="debug-bike-row">
+          <div class="debug-bike-title">
+            <span>${vtInfo.icon}</span>
+            <span>${physicalCode ? `Vélo N°<strong>${physicalCode}</strong>` : 'Vélo (UUID)'}</span>
+            ${statusBadge}
+          </div>
+          <div style="font-size:12px; font-weight:700; color:${rangePct > 35 ? 'var(--success)' : 'var(--danger)'}">
+            ${batIcon} ${rangePct}% (${rangeKm} km)
+          </div>
+        </div>
+
+        <div class="debug-bike-row" style="font-size:11px; color:var(--text-secondary);">
+          <div>${stationName}</div>
+          <div class="debug-uuid-box" title="Cliquer pour copier l'UUID complet" onclick="copyToClipboard('${b.bike_id}')">
+            🆔 ${b.bike_id.slice(0, 13)}... 📋
+          </div>
+        </div>
+
+        <div class="debug-bike-row" style="border-top:1px dashed var(--border); padding-top:6px; margin-top:2px;">
+          <div style="display:flex; align-items:center; gap:6px; font-size:11px;">
+            <label style="color:var(--text-muted);">N° QR :</label>
+            <input type="text" class="debug-code-input" placeholder="Ex: 124692" value="${physicalCode}" 
+                   onchange="saveBikePhysicalCode('${b.bike_id}', this.value)" />
+          </div>
+
+          <div class="debug-bike-actions">
+            ${b.lat && b.lon ? `<button class="debug-btn-action" onclick="flyToBike('${b.bike_id}', ${b.lat}, ${b.lon}, '${b.station_id || ''}')">🧭 Localiser</button>` : ''}
+            ${rentUrl ? `<a href="${rentUrl}" class="debug-btn-action debug-btn-rent" target="_blank" rel="noopener">🔓 Louer</a>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function flyToBike(bikeId, lat, lon, stationId) {
+  document.getElementById('debug-modal-overlay')?.classList.remove('open');
+
+  if (stationId) {
+    flyToStation(stationId);
+  } else {
+    map.flyTo([lat, lon], 18, { duration: 0.8 });
+    showToast(`📍 Vélo localisé en direct [${lat.toFixed(4)}, ${lon.toFixed(4)}]`);
+  }
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast(`📋 UUID copié !`);
+    }).catch(() => {
+      prompt('UUID du vélo :', text);
+    });
+  } else {
+    prompt('UUID du vélo :', text);
+  }
+}
+
+// ================================================================
 // INIT
 // ================================================================
 async function init() {
@@ -1684,6 +2161,7 @@ async function init() {
   setupSidebarToggle();
   setupZoomHandler();
   setupThemeToggle();
+  setupDebugModal();
 
   const ok = await loadAllData();
 
@@ -1694,6 +2172,7 @@ async function init() {
     renderFreeBikes();
     updateStats();
     renderStationList();
+    renderDebugBikesList();
     updateLastUpdated();
     startAutoRefresh();
     showToast('🚲 BikinMars est prêt !');
