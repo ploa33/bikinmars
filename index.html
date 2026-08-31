@@ -1240,50 +1240,12 @@ async function loadAllData() {
     // Tous les vélos pour l'explorateur / debug
     state.allBikes = bikesData.data.bikes || [];
 
-    // Synchronisation de la santé des vélos (Supabase / JSON)
-    await fetchBikeHealth().catch(() => {});
-
     state.lastUpdated = new Date();
     return true;
   } catch (err) {
     console.error('Data loading failed:', err);
     showError();
     return false;
-  }
-}
-
-const SUPABASE_DEFAULT_URL = 'https://gsjfopzecerceydcrkuv.supabase.co';
-const SUPABASE_DEFAULT_KEY = 'sb_publishable_EnOQfKmH5sD71lnO8QU_aw_ZQz6PG4h';
-
-async function fetchBikeHealth() {
-  try {
-    const sbUrl = localStorage.getItem('bikinmars-supabase-url') || SUPABASE_DEFAULT_URL;
-    const sbKey = localStorage.getItem('bikinmars-supabase-key') || SUPABASE_DEFAULT_KEY;
-    if (sbUrl && sbKey) {
-      const cleanUrl = sbUrl.replace(/\/$/, '');
-      const res = await fetch(`${cleanUrl}/rest/v1/vw_bikes_health?select=*`, {
-        headers: {
-          'apikey': sbKey,
-          'Authorization': `Bearer ${sbKey}`,
-        },
-        signal: AbortSignal.timeout(5000)
-      });
-      if (res.ok) {
-        const data = await res.json();
-        state.bikeHealth.clear();
-        data.forEach(b => state.bikeHealth.set(b.bike_id, b));
-        return;
-      }
-    }
-    // Fallback fichier local statique
-    const localRes = await fetch('./data/bikes_health.json', { signal: AbortSignal.timeout(3000) });
-    if (localRes.ok) {
-      const data = await localRes.json();
-      state.bikeHealth.clear();
-      (data.bikes || []).forEach(b => state.bikeHealth.set(b.bike_id, b));
-    }
-  } catch (e) {
-    // Non-bloquant si le tracker n'a pas encore poussé de données
   }
 }
 
